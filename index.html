@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Judo Fighter Tracker</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #18202f;
+    --panel-2: #1f2a3d;
+    --border: #2a3852;
+    --text: #e8eef7;
+    --muted: #93a2bd;
+    --accent: #4f8cff;
+    --green: #34d27b;
+    --red: #ff5d6c;
+    --amber: #ffb74d;
+    --white-side: #d8e0ee;
+    --blue-side: #6ea8ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 16px; }
+  header.app {
+    position: sticky; top: 0; z-index: 30;
+    background: linear-gradient(180deg, rgba(15,20,32,0.98), rgba(15,20,32,0.92));
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+  }
+  header.app .wrap { padding-top: 12px; padding-bottom: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .logo {
+    width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
+    background: var(--accent);
+    display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 18px;
+  }
+  .brand h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  .brand .sub { font-size: 12px; color: var(--muted); margin: 0; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1 1 auto; }
+  .btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    padding: 9px 14px; border-radius: 9px; font-size: 14px; cursor: pointer;
+    font-weight: 600; transition: background .15s, border-color .15s; white-space: nowrap;
+  }
+  .btn:hover { background: #283449; border-color: #3a4d6e; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #3d7af0; }
+  .btn.ghost { background: transparent; }
+  .btn.small { padding: 6px 10px; font-size: 13px; }
+  input[type="text"], input[type="search"] {
+    background: #0c1119; color: var(--text); border: 1px solid var(--border);
+    border-radius: 9px; padding: 11px 13px; font-size: 15px; width: 100%;
+    outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px; margin-bottom: 14px;
+  }
+  .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; font-weight: 700; }
+  .muted { color: var(--muted); }
+  .hidden { display: none !important; }
+  .hero h2 { margin: 2px 0 4px; font-size: 22px; }
+  .hero .meta { color: var(--muted); font-size: 14px; }
+
+  /* autocomplete */
+  .ac-wrap { position: relative; }
+  .ac-list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    max-height: 320px; overflow-y: auto; box-shadow: 0 12px 30px rgba(0,0,0,.4);
+  }
+  .ac-item { padding: 10px 13px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04); }
+  .ac-item:last-child { border-bottom: none; }
+  .ac-item:hover, .ac-item.active { background: #2a3a55; }
+  .ac-item .nm { font-weight: 600; }
+  .ac-item .det { font-size: 12px; color: var(--muted); }
+
+  /* chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 8px 6px 12px; font-size: 14px;
+  }
+  .chip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
+  .chip button:hover { color: var(--red); }
+
+  /* fighter cards */
+  .fighter { padding: 0; overflow: hidden; }
+  .fighter .head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; background: var(--panel-2); border-bottom: 1px solid var(--border);
+  }
+  .fighter .head .nm { font-size: 17px; font-weight: 700; }
+  .fighter .head .club { font-size: 13px; color: var(--muted); }
+  .fighter .head .rm { margin-left: auto; }
+
+  .nextfight {
+    margin: 14px 16px; padding: 14px; border-radius: 12px;
+    background: linear-gradient(135deg, rgba(79,140,255,.18), rgba(79,140,255,.05));
+    border: 1px solid rgba(79,140,255,.4);
+  }
+  .nextfight.live {
+    background: linear-gradient(135deg, rgba(255,93,108,.20), rgba(255,93,108,.05));
+    border-color: rgba(255,93,108,.55);
+  }
+  .nextfight .toprow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .matbadge {
+    display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 7px;
+    border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; font-size: 15px;
+  }
+  .nextfight.live .matbadge { background: var(--red); }
+  .nextfight .when { font-weight: 700; font-size: 16px; }
+  .nextfight .eta { color: var(--muted); font-size: 13px; }
+  .nextfight .vs { font-size: 15px; margin-top: 2px; }
+  .nextfight .ctx { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 rgba(255,93,108,.6); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(255,93,108,.5)} 70%{box-shadow:0 0 0 9px rgba(255,93,108,0)} 100%{box-shadow:0 0 0 0 rgba(255,93,108,0)} }
+
+  table.fights { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  table.fights td { padding: 9px 16px; border-top: 1px solid rgba(255,255,255,.05); vertical-align: top; font-size: 14px; }
+  .fights .stcol { width: 26px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; }
+  .dot.win { background: var(--green); }
+  .dot.loss { background: var(--red); }
+  .dot.up { background: var(--amber); }
+  .dot.done { background: var(--muted); }
+  .fights .res { font-weight: 700; }
+  .fights .res.win { color: var(--green); }
+  .fights .res.loss { color: var(--red); }
+  .fights .opp { color: var(--text); }
+  .fights .sub { color: var(--muted); font-size: 12.5px; }
+  .sec-title { padding: 10px 16px 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
+
+  .empty { text-align: center; color: var(--muted); padding: 28px 12px; }
+  .status { font-size: 12.5px; color: var(--muted); }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--panel-2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 14px; z-index: 100; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+  .err { color: var(--red); font-size: 14px; margin-top: 8px; }
+  .recent { margin-top: 12px; }
+  .recent .item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+  .recent .item:hover { background: var(--panel-2); }
+  .recent .item .t { font-weight: 600; }
+  .recent .item .s { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">柔</div>
+      <div>
+        <h1>Judo Fighter Tracker</h1>
+        <p class="sub" id="subtitle">Follow your fighters — see when &amp; where they fight</p>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn small ghost hidden" id="btnChange">Change tournament</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- STEP 1: choose tournament -->
+  <section id="screenComp">
+    <div class="card">
+      <div class="label">Step 1 · Choose a tournament</div>
+      <div class="row" style="align-items:stretch">
+        <input type="text" id="compInput" placeholder="Paste the JudoManager URL or tournament code, e.g. tournoi_ecoliers_sierre_2026" />
+        <button class="btn primary" id="btnLoadComp">Load</button>
+      </div>
+      <div class="muted" style="font-size:13px;margin-top:8px">
+        Open the event on portal.judomanager.com and paste its address here.
+      </div>
+      <div class="err hidden" id="compErr"></div>
+      <div class="recent" id="recentComps"></div>
+    </div>
+  </section>
+
+  <!-- STEP 2+3: fighters & schedule -->
+  <section id="screenMain" class="hidden">
+    <div class="card hero" id="hero"></div>
+
+    <div class="card">
+      <div class="label">Add a fighter to follow</div>
+      <div class="ac-wrap">
+        <input type="search" id="searchInput" autocomplete="off"
+               placeholder="Type a name or club — pick from the list" />
+        <div class="ac-list hidden" id="acList"></div>
+      </div>
+      <div class="chips" id="followChips"></div>
+      <div class="muted" style="font-size:13px;margin-top:10px" id="followHint">
+        Tip: add several fighters — siblings, club mates, friends — and you'll see everyone's next bout at a glance.
+      </div>
+    </div>
+
+    <div class="row" style="margin:2px 2px 12px">
+      <span class="status" id="statusLine"></span>
+      <div class="spacer"></div>
+      <label class="status" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="autoRefresh" checked /> auto-refresh
+      </label>
+      <button class="btn small" id="btnRefresh">Refresh now</button>
+    </div>
+
+    <div id="results"></div>
+  </section>
+
+</main>
+
+<script>
+"use strict";
+
+/* ----------------------------- config ----------------------------- */
+const API = "https://datav2.judomanager.com/api";
+// The JudoManager data API does not allow cross-origin (CORS) requests and the
+// contest payload is ~3-5 MB, which most public proxies reject. codetabs handles
+// large bodies and adds CORS headers, so it is tried first; the smaller ones are
+// fallbacks for the lightweight endpoints. A direct call is attempted first in
+// case the page is ever hosted somewhere the API trusts.
+const PROXIES = [
+  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+];
+const REFRESH_MS = 60000;
+
+/* ----------------------------- state ------------------------------ */
+let comp = null;            // {id, slug, title, place, country}
+let contests = [];          // raw contests array
+let personIndex = [];       // [{id, name, family, given, club, country, cats:Set}]
+let follow = [];            // [{id, name, club}]
+let refreshTimer = null;
+let acActive = -1;
+let acItems = [];
+
+/* --------------------------- utilities ---------------------------- */
+const $ = sel => document.querySelector(sel);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const esc = s => (s == null ? "" : String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])));
+
+function slugFromInput(v) {
+  v = (v || "").trim();
+  if (!v) return "";
+  const m = v.match(/competition\/([^/?#]+)/i);
+  if (m) return m[1];
+  // strip any stray url bits
+  return v.replace(/^https?:\/\/[^/]+\//i, "").split(/[/?#]/)[0];
+}
+
+async function jmFetch(url) {
+  // 1) direct
+  try {
+    const r = await fetch(url, { headers: { "Accept": "application/json" } });
+    if (r.ok) return await r.json();
+  } catch (e) { /* fall through to proxies */ }
+  // 2) proxies
+  for (const p of PROXIES) {
+    try {
+      const r = await fetch(p(url));
+      if (r.ok) {
+        const txt = await r.text();
+        try { return JSON.parse(txt); } catch (_) { /* not json, try next */ }
+      }
+    } catch (e) { /* next proxy */ }
+  }
+  throw new Error("Could not reach the JudoManager data service.");
+}
+
+function fmtClock(d) {
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function relTime(d) {
+  const diff = d.getTime() - Date.now();
+  const m = Math.round(diff / 60000);
+  if (m <= -1) return Math.abs(m) + " min ago";
+  if (m === 0) return "now";
+  if (m < 60) return "in " + m + " min";
+  const h = Math.floor(m / 60), mm = m % 60;
+  return "in " + h + "h" + (mm ? " " + mm + "m" : "");
+}
+
+/* --------------------------- localStorage ------------------------- */
+const LS_RECENT = "jm_recent_comps";
+function getRecent() { try { return JSON.parse(localStorage.getItem(LS_RECENT)) || []; } catch { return []; } }
+function pushRecent(c) {
+  let r = getRecent().filter(x => x.slug !== c.slug);
+  r.unshift({ slug: c.slug, id: c.id, title: c.title, place: c.place });
+  localStorage.setItem(LS_RECENT, JSON.stringify(r.slice(0, 8)));
+}
+function followKey() { return "jm_follow_" + (comp ? comp.id : "none"); }
+function loadFollow() { try { follow = JSON.parse(localStorage.getItem(followKey())) || []; } catch { follow = []; } }
+function saveFollow() { localStorage.setItem(followKey(), JSON.stringify(follow)); }
+
+/* --------------------------- competition -------------------------- */
+async function loadCompetition(slug) {
+  const info = await jmFetch(`${API}/Competition/Info?idExternal=${encodeURIComponent(slug)}`);
+  if (!info || !info.idCompetition) throw new Error("No tournament found for that code.");
+  comp = {
+    id: info.idCompetition,
+    slug: slug,
+    title: info.title || info.titleInternational || slug,
+    place: info.place || "",
+    country: info.country || "",
+    dateFrom: info.dateFrom || null,
+  };
+  pushRecent(comp);
+  loadFollow();
+}
+
+/* ----------------------------- data ------------------------------- */
+async function loadContests() {
+  const data = await jmFetch(`${API}/Contest/Find?IdCompetition=${comp.id}&Language=en`);
+  contests = (data && data.contests) ? data.contests : [];
+  buildPersonIndex();
+}
+
+function buildPersonIndex() {
+  const map = new Map();
+  for (const c of contests) {
+    for (const p of [c.personWhite, c.personBlue]) {
+      if (!p || !p.idPerson) continue;
+      let e = map.get(p.idPerson);
+      if (!e) {
+        e = {
+          id: p.idPerson,
+          family: p.familyName || "",
+          given: p.givenName || "",
+          name: ((p.givenName || "") + " " + (p.familyName || "")).trim(),
+          club: (p.club && (p.club.name || p.club.nameOfficial)) || "",
+          country: (p.country && p.country.short) || "",
+          cats: new Set(),
+        };
+        map.set(p.idPerson, e);
+      }
+      if (c.weightCategory) {
+        const ac = c.weightCategory.ageCategory;
+        e.cats.add((ac ? ac.shortName + " " : "") + (c.weightCategory.name || ""));
+      }
+    }
+  }
+  personIndex = [...map.values()].sort((a, b) => a.family.localeCompare(b.family));
+}
+
+/* score / result helpers */
+function sideOf(c, pid) {
+  if (c.personWhite && c.personWhite.idPerson === pid) return "white";
+  if (c.personBlue && c.personBlue.idPerson === pid) return "blue";
+  return null;
+}
+function opponentOf(c, side) {
+  const o = side === "white" ? c.personBlue : c.personWhite;
+  if (!o) return { name: "Bye", club: "" };
+  return {
+    name: ((o.givenName || "") + " " + (o.familyName || "")).trim() || "—",
+    club: (o.club && (o.club.name || o.club.nameOfficial)) || "",
+    country: (o.country && o.country.short) || "",
+  };
+}
+function scoreStr(s) {
+  if (!s) return "";
+  const parts = [];
+  if (s.ippon) parts.push(s.ippon + "I");
+  if (s.wazaari) parts.push(s.wazaari + "W");
+  if (s.yuko) parts.push(s.yuko + "Y");
+  if (s.penalty) parts.push(s.penalty + "S");
+  return parts.join(" ") || "0";
+}
+function catLabel(c) {
+  if (!c.weightCategory) return "";
+  const ac = c.weightCategory.ageCategory;
+  return ((ac ? ac.shortName + " " : "") + (c.weightCategory.name || "")).trim();
+}
+function plannedDate(c) {
+  if (c.zacetekPlaniran) { const d = new Date(c.zacetekPlaniran); if (!isNaN(d)) return d; }
+  return null;
+}
+
+/* fights for a given person id, time-sorted */
+function fightsFor(pid) {
+  const list = [];
+  for (const c of contests) {
+    const side = sideOf(c, pid);
+    if (!side) continue;
+    list.push(c);
+  }
+  list.sort((a, b) => {
+    const da = plannedDate(a) || (a.timeStart ? new Date(a.timeStart) : null);
+    const db = plannedDate(b) || (b.timeStart ? new Date(b.timeStart) : null);
+    if (da && db) return da - db;
+    if (da) return -1;
+    if (db) return 1;
+    return (a.mat - b.mat) || (a.fightNo - b.fightNo);
+  });
+  return list;
+}
+
+/* how many not-finished fights are queued ahead on the same mat */
+function fightsAhead(c) {
+  if (!c.mat) return null;
+  const myT = plannedDate(c);
+  let n = 0;
+  for (const o of contests) {
+    if (o === c) continue;
+    if (o.mat !== c.mat) continue;
+    if (o.isFinished) continue;
+    if (!o.personWhite || !o.personBlue) continue; // skip byes/placeholders
+    const ot = plannedDate(o);
+    if (myT && ot) { if (ot < myT) n++; }
+    else if (o.fightNo < c.fightNo) n++;
+  }
+  return n;
+}
+
+/* ----------------------------- render ----------------------------- */
+function renderHero() {
+  const sub = [comp.place, comp.country].filter(Boolean).join(", ");
+  $("#hero").innerHTML =
+    `<h2>${esc(comp.title)}</h2>` +
+    `<div class="meta">${esc(sub)}</div>`;
+}
+
+function renderChips() {
+  const box = $("#followChips");
+  box.innerHTML = "";
+  if (!follow.length) {
+    box.innerHTML = `<span class="muted" style="font-size:13px">No fighters yet — search above to add one.</span>`;
+    return;
+  }
+  for (const f of follow) {
+    const chip = el("span", "chip");
+    chip.innerHTML = `<span>${esc(f.name)}</span>`;
+    const x = el("button", null, "&times;");
+    x.title = "Remove";
+    x.onclick = () => { follow = follow.filter(y => y.id !== f.id); saveFollow(); renderChips(); renderResults(); };
+    chip.appendChild(x);
+    box.appendChild(chip);
+  }
+}
+
+function fightRow(c, pid) {
+  const side = sideOf(c, pid);
+  const opp = opponentOf(c, side);
+  const planned = plannedDate(c);
+  const tr = el("tr");
+
+  // status dot
+  let dotCls = "up", resHtml = "";
+  if (c.bye && (!c.personWhite || !c.personBlue)) {
+    dotCls = "done";
+  } else if (c.isFinished) {
+    const won = c.idWinner && c.idWinner === pid;
+    dotCls = won ? "win" : "loss";
+    const myScore = scoreStr(side === "white" ? c.scoreWhite : c.scoreBlue);
+    const opScore = scoreStr(side === "white" ? c.scoreBlue : c.scoreWhite);
+    resHtml = `<span class="res ${won ? "win" : "loss"}">${won ? "WON" : "LOST"}</span> <span class="sub">${esc(myScore)}–${esc(opScore)}</span>`;
+  }
+
+  const oppLine = (c.bye && (!c.personWhite || !c.personBlue))
+    ? `<span class="opp">Bye — advances</span>`
+    : `<span class="opp">vs ${esc(opp.name)}</span>` + (opp.club ? ` <span class="sub">(${esc(opp.club)})</span>` : "");
+
+  const whenCol = c.isFinished
+    ? `<span class="sub">done</span>`
+    : (planned
+        ? `${esc(fmtClock(planned))}<div class="sub">${planned.getTime() > Date.now() ? esc(relTime(planned)) : "pending"}</div>`
+        : `<span class="sub">TBD</span>`);
+
+  const matCol = c.mat ? `Mat ${c.mat}` : "";
+  const ctx = [catLabel(c), c.roundName].filter(Boolean).join(" · ");
+
+  tr.innerHTML =
+    `<td class="stcol"><span class="dot ${dotCls}"></span></td>` +
+    `<td>${oppLine}<div class="sub">${esc(ctx)}${matCol ? " · " + matCol : ""}</div></td>` +
+    `<td style="text-align:right;white-space:nowrap">${resHtml || whenCol}</td>`;
+  return tr;
+}
+
+function fighterCard(f) {
+  const card = el("div", "card fighter");
+  const head = el("div", "head");
+  head.innerHTML = `<div><div class="nm">${esc(f.name)}</div><div class="club">${esc(f.club || "")}</div></div>`;
+  const rm = el("button", "btn small ghost rm", "Remove");
+  rm.onclick = () => { follow = follow.filter(y => y.id !== f.id); saveFollow(); renderChips(); renderResults(); };
+  head.appendChild(rm);
+  card.appendChild(head);
+
+  const fl = fightsFor(f.id);
+  const upcoming = fl.filter(c => !c.isFinished && c.personWhite && c.personBlue);
+  const next = upcoming[0];
+
+  if (next) {
+    const planned = plannedDate(next);
+    const ahead = fightsAhead(next);
+    const onMat = next.mat > 0;
+    const future = planned && planned.getTime() > Date.now();
+    // "Live / next up" only when it is actually first in the mat queue — the
+    // scheduled clock time is unreliable (events often run behind), so the mat
+    // queue position is the headline and the planned time is shown as context.
+    const isLive = onMat && ahead === 0;
+    const nf = el("div", "nextfight" + (isLive ? " live" : ""));
+    const opp = opponentOf(next, sideOf(next, f.id));
+
+    let headline;
+    if (onMat && ahead === 0) headline = "On the mat now / next up";
+    else if (onMat) headline = "~" + ahead + " fight" + (ahead > 1 ? "s" : "") + " ahead on this mat";
+    else if (future) headline = relTime(planned);
+    else headline = "Not yet scheduled";
+
+    const schedTxt = planned
+      ? "scheduled " + fmtClock(planned) + (future ? " · " + relTime(planned) : "")
+      : "";
+
+    nf.innerHTML =
+      `<div class="toprow">` +
+        (isLive ? `<span class="pulse"></span>` : "") +
+        `<span class="matbadge">${onMat ? "Mat " + next.mat : "Mat —"}</span>` +
+        `<span class="when">${esc(headline)}</span>` +
+      `</div>` +
+      `<div class="vs">vs <strong>${esc(opp.name)}</strong>${opp.club ? ` <span class="eta">(${esc(opp.club)})</span>` : ""}</div>` +
+      `<div class="ctx">${esc([catLabel(next), next.roundName].filter(Boolean).join(" · "))}${schedTxt ? " · " + esc(schedTxt) : ""}</div>`;
+    card.appendChild(nf);
+  } else {
+    const done = el("div", "nextfight");
+    done.style.background = "none";
+    done.style.borderColor = "var(--border)";
+    done.innerHTML = `<div class="muted">No upcoming bouts — ${fl.some(c => c.isFinished) ? "competition finished for this fighter." : "draw not published yet."}</div>`;
+    card.appendChild(done);
+  }
+
+  // all fights table
+  if (fl.length) {
+    card.appendChild(el("div", "sec-title", "All bouts"));
+    const tbl = el("table", "fights");
+    for (const c of fl) tbl.appendChild(fightRow(c, f.id));
+    card.appendChild(tbl);
+  }
+  return card;
+}
+
+function renderResults() {
+  const box = $("#results");
+  box.innerHTML = "";
+  if (!follow.length) {
+    box.appendChild(el("div", "card empty", "Add one or more fighters above to start tracking them."));
+    return;
+  }
+  // sort fighter cards: those with an upcoming fight first, by soonest
+  const withNext = follow.map(f => {
+    const up = fightsFor(f.id).filter(c => !c.isFinished && c.personWhite && c.personBlue);
+    const d = up[0] ? (plannedDate(up[0]) || new Date(8640000000000000)) : null;
+    return { f, soon: d ? d.getTime() : Infinity };
+  }).sort((a, b) => a.soon - b.soon);
+
+  for (const x of withNext) box.appendChild(fighterCard(x.f));
+}
+
+/* ---------------------------- autocomplete ------------------------ */
+function runSearch(q) {
+  q = q.trim().toLowerCase();
+  const list = $("#acList");
+  if (!q) { list.classList.add("hidden"); return; }
+  const terms = q.split(/\s+/);
+  const followedIds = new Set(follow.map(f => f.id));
+  const matches = personIndex.filter(p => {
+    if (followedIds.has(p.id)) return false;
+    const hay = (p.name + " " + p.club + " " + p.country).toLowerCase();
+    return terms.every(t => hay.includes(t));
+  }).slice(0, 40);
+  acItems = matches;
+  acActive = -1;
+  if (!matches.length) {
+    list.innerHTML = `<div class="ac-item"><span class="det">No matching competitors</span></div>`;
+    list.classList.remove("hidden");
+    return;
+  }
+  list.innerHTML = "";
+  matches.forEach((p, i) => {
+    const item = el("div", "ac-item");
+    const cats = [...p.cats].filter(Boolean).slice(0, 3).join(", ");
+    item.innerHTML = `<div class="nm">${esc(p.name)}</div><div class="det">${esc([p.club, cats, p.country].filter(Boolean).join(" · "))}</div>`;
+    item.onclick = () => addFollow(p);
+    item.dataset.i = i;
+    list.appendChild(item);
+  });
+  list.classList.remove("hidden");
+}
+function highlightAc() {
+  [...$("#acList").children].forEach((c, i) => c.classList.toggle("active", i === acActive));
+}
+function addFollow(p) {
+  if (!follow.some(f => f.id === p.id)) {
+    follow.push({ id: p.id, name: p.name, club: p.club });
+    saveFollow();
+  }
+  $("#searchInput").value = "";
+  $("#acList").classList.add("hidden");
+  renderChips();
+  renderResults();
+}
+
+/* ----------------------------- refresh ---------------------------- */
+async function refresh(showSpinner) {
+  const status = $("#statusLine");
+  try {
+    if (showSpinner) status.textContent = "Updating…";
+    await loadContests();
+    renderChips();
+    renderResults();
+    status.textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      + " · " + personIndex.length + " competitors · " + contests.filter(c => c.isFinished).length + "/" + contests.length + " bouts done";
+  } catch (e) {
+    status.textContent = "Update failed — will retry. (" + e.message + ")";
+  }
+}
+function startAuto() {
+  stopAuto();
+  if ($("#autoRefresh").checked) refreshTimer = setInterval(() => refresh(false), REFRESH_MS);
+}
+function stopAuto() { if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
+
+/* ----------------------------- screens ---------------------------- */
+function showMain() {
+  $("#screenComp").classList.add("hidden");
+  $("#screenMain").classList.remove("hidden");
+  $("#btnChange").classList.remove("hidden");
+  $("#subtitle").textContent = comp.title;
+  renderHero();
+  renderChips();
+  renderResults();
+  refresh(true);
+  startAuto();
+}
+function showComp() {
+  stopAuto();
+  comp = null; contests = []; personIndex = [];
+  $("#screenMain").classList.add("hidden");
+  $("#screenComp").classList.remove("hidden");
+  $("#btnChange").classList.add("hidden");
+  $("#subtitle").textContent = "Follow your fighters — see when & where they fight";
+  renderRecent();
+}
+function renderRecent() {
+  const r = getRecent();
+  const box = $("#recentComps");
+  box.innerHTML = "";
+  if (!r.length) return;
+  box.appendChild(el("div", "label", "Recent"));
+  for (const c of r) {
+    const item = el("div", "item");
+    item.innerHTML = `<div><div class="t">${esc(c.title || c.slug)}</div><div class="s">${esc(c.place || c.slug)}</div></div>`;
+    item.onclick = () => doLoad(c.slug);
+    box.appendChild(item);
+  }
+}
+
+async function doLoad(rawInput) {
+  const slug = slugFromInput(rawInput);
+  const errEl = $("#compErr");
+  errEl.classList.add("hidden");
+  if (!slug) { errEl.textContent = "Please paste a tournament URL or code."; errEl.classList.remove("hidden"); return; }
+  const btn = $("#btnLoadComp");
+  const old = btn.textContent; btn.textContent = "Loading…"; btn.disabled = true;
+  try {
+    await loadCompetition(slug);
+    showMain();
+  } catch (e) {
+    errEl.textContent = e.message || "Could not load that tournament.";
+    errEl.classList.remove("hidden");
+  } finally {
+    btn.textContent = old; btn.disabled = false;
+  }
+}
+
+/* ------------------------------ wire ------------------------------ */
+$("#btnLoadComp").onclick = () => doLoad($("#compInput").value);
+$("#compInput").addEventListener("keydown", e => { if (e.key === "Enter") doLoad($("#compInput").value); });
+$("#btnChange").onclick = showComp;
+$("#btnRefresh").onclick = () => refresh(true);
+$("#autoRefresh").onchange = startAuto;
+
+const searchInput = $("#searchInput");
+searchInput.addEventListener("input", () => runSearch(searchInput.value));
+searchInput.addEventListener("focus", () => { if (searchInput.value) runSearch(searchInput.value); });
+searchInput.addEventListener("keydown", e => {
+  const list = $("#acList");
+  if (list.classList.contains("hidden")) return;
+  if (e.key === "ArrowDown") { e.preventDefault(); acActive = Math.min(acActive + 1, acItems.length - 1); highlightAc(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); acActive = Math.max(acActive - 1, 0); highlightAc(); }
+  else if (e.key === "Enter") { e.preventDefault(); if (acActive >= 0 && acItems[acActive]) addFollow(acItems[acActive]); else if (acItems[0]) addFollow(acItems[0]); }
+  else if (e.key === "Escape") { list.classList.add("hidden"); }
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest(".ac-wrap")) $("#acList").classList.add("hidden");
+});
+
+// re-render times every minute so "in X min" stays fresh
+setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
+
+/* ----------------------------- startup ---------------------------- */
+(function init() {
+  renderRecent();
+  // deep-link support: index.html#tournoi_ecoliers_sierre_2026
+  const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if (hash) { $("#compInput").value = hash; doLoad(hash); }
+})();
+</script>
+</body>
+</html>
