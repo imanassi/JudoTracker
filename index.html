@@ -150,11 +150,16 @@
     box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 14px; z-index: 100; }
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
   .err { color: var(--red); font-size: 14px; margin-top: 8px; }
-  .recent { margin-top: 12px; }
-  .recent .item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
-  .recent .item:hover { background: var(--panel-2); }
-  .recent .item .t { font-weight: 600; }
-  .recent .item .s { font-size: 12px; color: var(--muted); }
+  select.jm {
+    background: #0c1119; color: var(--text); border: 1px solid var(--border);
+    border-radius: 9px; padding: 11px 13px; font-size: 15px; width: 100%;
+    outline: none; cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2393a2bd' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 13px center; padding-right: 38px;
+  }
+  select.jm:focus { border-color: var(--accent); }
+  .or-sep { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 12px 0; text-transform: uppercase; letter-spacing: .04em; }
+  .or-sep::before, .or-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 </style>
 </head>
 <body>
@@ -179,15 +184,24 @@
   <section id="screenComp">
     <div class="card">
       <div class="label">Step 1 · Choose a tournament</div>
-      <div class="row" style="align-items:stretch">
-        <input type="text" id="compInput" placeholder="Paste the JudoManager URL or tournament code, e.g. tournoi_ecoliers_sierre_2026" />
-        <button class="btn primary" id="btnLoadComp">Load</button>
+
+      <div id="compPickerWrap" class="hidden">
+        <select class="jm" id="compSelect"></select>
+        <div class="or-sep" id="compOrSep">or</div>
       </div>
-      <div class="muted" style="font-size:13px;margin-top:8px">
-        Open the event on portal.judomanager.com and paste its address here.
+
+      <div id="compEntry">
+        <div class="row" style="align-items:stretch">
+          <input type="text" id="compInput" placeholder="Paste the JudoManager URL or tournament code, e.g. tournoi_ecoliers_sierre_2026" />
+          <button class="btn primary" id="btnLoadComp">Load</button>
+        </div>
+        <div class="muted" style="font-size:13px;margin-top:8px">
+          Open the event on portal.judomanager.com and paste its address here.
+        </div>
       </div>
+
+      <div class="muted hidden" id="compStatus" style="font-size:13px;margin-top:10px"></div>
       <div class="err hidden" id="compErr"></div>
-      <div class="recent" id="recentComps"></div>
     </div>
   </section>
 
@@ -652,29 +666,45 @@ function showComp() {
   $("#screenComp").classList.remove("hidden");
   $("#btnChange").classList.add("hidden");
   $("#subtitle").textContent = "Follow your fighters — see when & where they fight";
-  renderRecent();
+  $("#compStatus").classList.add("hidden");
+  $("#compErr").classList.add("hidden");
+  renderCompPicker();
 }
-function renderRecent() {
+function renderCompPicker() {
   const r = getRecent();
-  const box = $("#recentComps");
-  box.innerHTML = "";
-  if (!r.length) return;
-  box.appendChild(el("div", "label", "Recent"));
-  for (const c of r) {
-    const item = el("div", "item");
-    item.innerHTML = `<div><div class="t">${esc(c.title || c.slug)}</div><div class="s">${esc(c.place || c.slug)}</div></div>`;
-    item.onclick = () => doLoad(c.slug);
-    box.appendChild(item);
+  const wrap = $("#compPickerWrap");
+  const sel = $("#compSelect");
+  const entry = $("#compEntry");
+  if (!r.length) {
+    // nothing saved yet — just show the URL/code box
+    wrap.classList.add("hidden");
+    entry.classList.remove("hidden");
+    return;
   }
+  wrap.classList.remove("hidden");
+  sel.innerHTML = "";
+  const ph = el("option"); ph.value = ""; ph.textContent = "Select a tournament…"; sel.appendChild(ph);
+  for (const c of r) {
+    const o = el("option");
+    o.value = c.slug;
+    o.textContent = (c.title || c.slug) + (c.place ? " — " + c.place : "");
+    sel.appendChild(o);
+  }
+  const nw = el("option"); nw.value = "__new__"; nw.textContent = "➕  Enter a new tournament…"; sel.appendChild(nw);
+  sel.value = "";
+  // keep the URL box hidden until the user explicitly chooses "new"
+  entry.classList.add("hidden");
 }
 
 async function doLoad(rawInput) {
   const slug = slugFromInput(rawInput);
   const errEl = $("#compErr");
+  const statusEl = $("#compStatus");
   errEl.classList.add("hidden");
   if (!slug) { errEl.textContent = "Please paste a tournament URL or code."; errEl.classList.remove("hidden"); return; }
-  const btn = $("#btnLoadComp");
-  const old = btn.textContent; btn.textContent = "Loading…"; btn.disabled = true;
+  const btn = $("#btnLoadComp"), sel = $("#compSelect");
+  btn.textContent = "Loading…"; btn.disabled = true; sel.disabled = true;
+  statusEl.textContent = "Loading tournament…"; statusEl.classList.remove("hidden");
   try {
     await loadCompetition(slug);
     showMain();
@@ -682,13 +712,21 @@ async function doLoad(rawInput) {
     errEl.textContent = e.message || "Could not load that tournament.";
     errEl.classList.remove("hidden");
   } finally {
-    btn.textContent = old; btn.disabled = false;
+    btn.textContent = "Load"; btn.disabled = false; sel.disabled = false;
+    statusEl.classList.add("hidden");
   }
 }
 
 /* ------------------------------ wire ------------------------------ */
 $("#btnLoadComp").onclick = () => doLoad($("#compInput").value);
 $("#compInput").addEventListener("keydown", e => { if (e.key === "Enter") doLoad($("#compInput").value); });
+$("#compSelect").onchange = e => {
+  const v = e.target.value;
+  const entry = $("#compEntry");
+  if (v === "__new__") { entry.classList.remove("hidden"); $("#compInput").value = ""; $("#compInput").focus(); }
+  else if (v) { entry.classList.add("hidden"); doLoad(v); }
+  else { entry.classList.add("hidden"); }
+};
 $("#btnChange").onclick = showComp;
 $("#btnRefresh").onclick = () => refresh(true);
 $("#autoRefresh").onchange = startAuto;
@@ -713,7 +751,7 @@ setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
 
 /* ----------------------------- startup ---------------------------- */
 (function init() {
-  renderRecent();
+  renderCompPicker();
   // deep-link support: index.html#tournoi_ecoliers_sierre_2026
   const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (hash) { $("#compInput").value = hash; doLoad(hash); }

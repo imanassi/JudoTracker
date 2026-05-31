@@ -10,9 +10,11 @@ It's one self-contained file: [`index.html`](index.html). No build step, no depe
 ## How to use
 
 1. Open the app (see *Running it* below).
-2. **Choose a tournament:** paste the portal URL (e.g.
+2. **Choose a tournament:** pick a previously-used tournament from the dropdown,
+   or choose **➕ Enter a new tournament…** and paste the portal URL (e.g.
    `https://portal.judomanager.com/competition/tournoi_ecoliers_sierre_2026`)
-   or just the code (`tournoi_ecoliers_sierre_2026`) and press **Load**.
+   or just the code (`tournoi_ecoliers_sierre_2026`), then press **Load**.
+   Every tournament you load is remembered and appears in the dropdown next time.
 3. **Add fighters:** start typing a name (or club) and pick from the list of real
    entrants. Add as many as you like.
 4. Each fighter gets a card with their **next bout** (mat + queue position) and a
