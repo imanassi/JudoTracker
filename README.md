@@ -10,15 +10,30 @@ It's one self-contained file: [`index.html`](index.html). No build step, no depe
 ## How to use
 
 1. Open the app (see *Running it* below).
-2. **Choose a tournament:** pick a previously-used tournament from the dropdown,
-   or choose **➕ Enter a new tournament…** and paste the portal URL (e.g.
-   `https://portal.judomanager.com/competition/tournoi_ecoliers_sierre_2026`)
-   or just the code (`tournoi_ecoliers_sierre_2026`), then press **Load**.
-   Every tournament you load is remembered and appears in the dropdown next time.
-3. **Add fighters:** start typing a name (or club) and pick from the list of real
-   entrants. Add as many as you like.
-4. Each fighter gets a card with their **next bout** (mat + queue position) and a
-   list of **all their bouts** (wins/losses with scores, and what's still to come).
+2. **Choose a tournament** from the dropdown. It lists:
+   - **Featured tournaments** — the events JudoManager is currently featuring
+     (fetched live from `Competition/GetFeatured`).
+   - **Recently used** — every tournament you've loaded before (remembered in your browser).
+   - **➕ Enter a new tournament by URL / code** — for anything not in the lists above:
+     paste the portal URL (e.g.
+     `https://portal.judomanager.com/competition/tournoi_ecoliers_sierre_2026`)
+     or just the code (`tournoi_ecoliers_sierre_2026`) and press **Load**.
+
+   (The featured list is curated by JudoManager and won't contain every event — use the
+   URL/code option for a specific local tournament that isn't featured.)
+3. **Add fighters**, two ways:
+   - **By name:** start typing a name (or club) and pick from the list of real entrants.
+   - **By club:** choose a club from the *Browse a club* dropdown to see everyone
+     entered from that club, then **Add** them individually or **Add all** at once.
+   Add as many as you like; each one can be removed again from its **Added ✓** button,
+   the *Following* chips, or its card.
+4. Each fighter gets a card with their **next bout** (mat + queue position + the
+   **belt colour they must wear** — White or Red) and a list of **all their bouts**
+   (wins/losses with scores, the belt for each, and what's still to come).
+
+5. **Export** gives a plain-text win/loss summary — one line per fighter,
+   `Name <wins> win - <losses> lost` (byes don't count). Click **Export** to open a
+   dialog where you can **Copy to clipboard** or **Download .txt**.
 
 Followed fighters and recent tournaments are remembered in your browser
 (`localStorage`), so they're still there next time you open the app.
@@ -46,7 +61,10 @@ from `file://` may be blocked by the browser.
 
 ## How it works
 
-- Resolves the tournament code to an internal id via
+- Populates the *Featured tournaments* dropdown from
+  `GET https://datav2.judomanager.com/api/Competition/GetFeatured?Language=en`
+  (selecting one uses its `idCompetition`/`idExternal` directly — no extra lookup).
+- For a pasted code, resolves it to an internal id via
   `GET https://datav2.judomanager.com/api/Competition/Info?idExternal=<code>`.
 - Loads every contest with
   `GET https://datav2.judomanager.com/api/Contest/Find?IdCompetition=<id>&Language=en`,
@@ -66,7 +84,12 @@ tries, in order: a direct call, then [`api.codetabs.com`](https://codetabs.com/c
 (which handles the large body), then `corsproxy.io` and `allorigins.win` for the
 smaller calls.
 
+The app tries several proxies in order (`cors.eu.org`, `api.codetabs.com`,
+`corsproxy.io`, `allorigins.win`), each with its own timeout so a slow or
+rate-limited one is skipped automatically.
+
 This means **the app depends on a third-party proxy being up.** If loading ever fails,
-that's the likely cause. For a permanent, self-owned setup, deploy a tiny proxy (e.g.
-a Cloudflare Worker) that forwards to `datav2.judomanager.com` with
-`Access-Control-Allow-Origin: *`, and point `PROXIES` in `index.html` at it.
+that's the likely cause — wait a moment and it auto-retries, or press *Refresh now*.
+For a permanent, self-owned setup, deploy a tiny proxy (e.g. a Cloudflare Worker) that
+forwards to `datav2.judomanager.com` with `Access-Control-Allow-Origin: *`, and put it
+first in the `PROXIES` list in `index.html`.

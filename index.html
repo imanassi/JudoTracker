@@ -115,7 +115,7 @@
     background: linear-gradient(135deg, rgba(255,93,108,.20), rgba(255,93,108,.05));
     border-color: rgba(255,93,108,.55);
   }
-  .nextfight .toprow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .nextfight .toprow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
   .matbadge {
     display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 7px;
     border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; font-size: 15px;
@@ -142,6 +142,21 @@
   .fights .opp { color: var(--text); }
   .fights .sub { color: var(--muted); font-size: 12.5px; }
   .sec-title { padding: 10px 16px 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
+  /* belt / side indicator (white belt vs red belt) */
+  .belt { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 6px; letter-spacing: .02em; white-space: nowrap; }
+  .belt.white { background: #eef2f8; color: #11161f; box-shadow: inset 0 0 0 1px #c4cddd; }
+  .belt.red { background: var(--red); color: #fff; }
+  .belt-mini { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+  .belt-mini::before { content: ""; width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .belt-mini.white::before { background: #eef2f8; box-shadow: inset 0 0 0 1px #8a96ad; }
+  .belt-mini.red::before { background: var(--red); }
+  /* export modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.62); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; width: 100%; max-width: 480px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .modal-head strong { font-size: 16px; }
+  #exportText { width: 100%; height: 240px; background: #0c1119; color: var(--text); border: 1px solid var(--border); border-radius: 9px; padding: 11px 13px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.5; resize: vertical; outline: none; }
+  #exportText:focus { border-color: var(--accent); }
 
   .empty { text-align: center; color: var(--muted); padding: 28px 12px; }
   .status { font-size: 12.5px; color: var(--muted); }
@@ -160,6 +175,15 @@
   select.jm:focus { border-color: var(--accent); }
   .or-sep { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 12px 0; text-transform: uppercase; letter-spacing: .04em; }
   .or-sep::before, .or-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .club-head { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+  .club-head .ttl { flex: 1; }
+  #clubMembers { max-height: 320px; overflow-y: auto; margin-top: 2px; }
+  .member { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-top: 1px solid rgba(255,255,255,.05); }
+  .member .nm { font-weight: 600; }
+  .member .det { font-size: 12px; color: var(--muted); }
+  .member button { margin-left: auto; flex: 0 0 auto; }
+  .btn.small.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small.primary:hover { background: #3d7af0; }
 </style>
 </head>
 <body>
@@ -187,10 +211,10 @@
 
       <div id="compPickerWrap" class="hidden">
         <select class="jm" id="compSelect"></select>
-        <div class="or-sep" id="compOrSep">or</div>
       </div>
 
       <div id="compEntry">
+        <div class="or-sep" id="compOrSep">or</div>
         <div class="row" style="align-items:stretch">
           <input type="text" id="compInput" placeholder="Paste the JudoManager URL or tournament code, e.g. tournoi_ecoliers_sierre_2026" />
           <button class="btn primary" id="btnLoadComp">Load</button>
@@ -216,6 +240,12 @@
                placeholder="Type a name or club — pick from the list" />
         <div class="ac-list hidden" id="acList"></div>
       </div>
+
+      <div class="or-sep">or browse a club</div>
+      <select class="jm" id="clubSelect"><option value="">Browse a club…</option></select>
+      <div id="clubMembers"></div>
+
+      <div class="label" style="margin-top:16px">Following</div>
       <div class="chips" id="followChips"></div>
       <div class="muted" style="font-size:13px;margin-top:10px" id="followHint">
         Tip: add several fighters — siblings, club mates, friends — and you'll see everyone's next bout at a glance.
@@ -228,6 +258,7 @@
       <label class="status" style="display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="autoRefresh" checked /> auto-refresh
       </label>
+      <button class="btn small" id="btnExport">Export</button>
       <button class="btn small" id="btnRefresh">Refresh now</button>
     </div>
 
@@ -235,6 +266,22 @@
   </section>
 
 </main>
+
+<!-- export results dialog -->
+<div id="exportModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <strong>Results summary</strong>
+      <button class="btn small ghost" id="exportClose">Close</button>
+    </div>
+    <textarea id="exportText" readonly spellcheck="false"></textarea>
+    <div class="row" style="margin-top:12px">
+      <button class="btn small primary" id="exportCopy">Copy to clipboard</button>
+      <button class="btn small" id="exportDownload">Download .txt</button>
+      <span class="status" id="exportMsg"></span>
+    </div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -247,10 +294,12 @@ const API = "https://datav2.judomanager.com/api";
 // fallbacks for the lightweight endpoints. A direct call is attempted first in
 // case the page is ever hosted somewhere the API trusts.
 const PROXIES = [
+  u => "https://cors.eu.org/" + u,
   u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
   u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
   u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
 ];
+const FETCH_TIMEOUT_MS = 15000;
 const REFRESH_MS = 60000;
 
 /* ----------------------------- state ------------------------------ */
@@ -261,6 +310,8 @@ let follow = [];            // [{id, name, club}]
 let refreshTimer = null;
 let acActive = -1;
 let acItems = [];
+let featured = [];          // featured competitions from the API
+let featuredState = "idle"; // idle | loading | done | error
 
 /* --------------------------- utilities ---------------------------- */
 const $ = sel => document.querySelector(sel);
@@ -276,16 +327,22 @@ function slugFromInput(v) {
   return v.replace(/^https?:\/\/[^/]+\//i, "").split(/[/?#]/)[0];
 }
 
+async function fetchWithTimeout(url, opts) {
+  const ac = new AbortController();
+  const id = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+  try { return await fetch(url, Object.assign({ signal: ac.signal }, opts)); }
+  finally { clearTimeout(id); }
+}
 async function jmFetch(url) {
-  // 1) direct
+  // 1) direct (works only if the page is hosted on an origin the API trusts)
   try {
-    const r = await fetch(url, { headers: { "Accept": "application/json" } });
+    const r = await fetchWithTimeout(url, { headers: { "Accept": "application/json" } });
     if (r.ok) return await r.json();
   } catch (e) { /* fall through to proxies */ }
-  // 2) proxies
+  // 2) proxies — each with its own timeout so a slow/throttling one is skipped
   for (const p of PROXIES) {
     try {
-      const r = await fetch(p(url));
+      const r = await fetchWithTimeout(p(url));
       if (r.ok) {
         const txt = await r.text();
         try { return JSON.parse(txt); } catch (_) { /* not json, try next */ }
@@ -334,6 +391,41 @@ async function loadCompetition(slug) {
   };
   pushRecent(comp);
   loadFollow();
+}
+
+async function loadFeatured() {
+  if (featuredState === "loading" || featuredState === "done") { renderCompPicker(); return; }
+  featuredState = "loading";
+  renderCompPicker();
+  try {
+    const data = await jmFetch(`${API}/Competition/GetFeatured?Language=en`);
+    const arr = Array.isArray(data) ? data : [];
+    featured = arr
+      .filter(e => e && e.idCompetition)
+      .map(e => ({
+        id: e.idCompetition,
+        slug: e.idExternal || "",
+        title: e.nameInternational || e.name || e.idExternal || ("Competition " + e.idCompetition),
+        place: e.city || "",
+        country: e.countryShort || "",
+        dateFrom: e.dateFrom || null,
+        dateTo: e.dateTo || null,
+      }));
+    featuredState = "done";
+  } catch (e) {
+    featuredState = "error";
+  }
+  renderCompPicker();
+}
+
+// Build a competition object straight from a featured entry (no extra lookup).
+function enterFeatured(id) {
+  const e = featured.find(x => x.id === id);
+  if (!e) return;
+  comp = { id: e.id, slug: e.slug || ("id-" + e.id), title: e.title, place: e.place, country: e.country, dateFrom: e.dateFrom };
+  pushRecent(comp);
+  loadFollow();
+  showMain();
 }
 
 /* ----------------------------- data ------------------------------- */
@@ -460,21 +552,43 @@ function renderChips() {
     chip.innerHTML = `<span>${esc(f.name)}</span>`;
     const x = el("button", null, "&times;");
     x.title = "Remove";
-    x.onclick = () => { follow = follow.filter(y => y.id !== f.id); saveFollow(); renderChips(); renderResults(); };
+    x.onclick = () => removeFollow(f.id);
     chip.appendChild(x);
     box.appendChild(chip);
   }
+}
+
+// JudoManager stores the two sides as "white" and "blue"; at these belt-style
+// tournaments that is the white-belt vs red-belt the judoka must wear.
+function belt(side) {
+  return side === "white"
+    ? { cls: "white", label: "White belt" }
+    : { cls: "red", label: "Red belt" };
+}
+
+// win / loss tally over a fighter's finished, real (non-bye) bouts
+function fighterRecord(pid) {
+  let w = 0, l = 0;
+  for (const c of fightsFor(pid)) {
+    if (!c.isFinished) continue;
+    if (!c.personWhite || !c.personBlue) continue;   // bye / placeholder
+    if (c.idWinner === pid) w++;
+    else if (c.idWinner) l++;                          // a real opponent won
+    // no winner recorded (draw/unknown) -> not counted
+  }
+  return { w, l };
 }
 
 function fightRow(c, pid) {
   const side = sideOf(c, pid);
   const opp = opponentOf(c, side);
   const planned = plannedDate(c);
+  const isBye = c.bye && (!c.personWhite || !c.personBlue);
   const tr = el("tr");
 
   // status dot
   let dotCls = "up", resHtml = "";
-  if (c.bye && (!c.personWhite || !c.personBlue)) {
+  if (isBye) {
     dotCls = "done";
   } else if (c.isFinished) {
     const won = c.idWinner && c.idWinner === pid;
@@ -484,9 +598,14 @@ function fightRow(c, pid) {
     resHtml = `<span class="res ${won ? "win" : "loss"}">${won ? "WON" : "LOST"}</span> <span class="sub">${esc(myScore)}–${esc(opScore)}</span>`;
   }
 
-  const oppLine = (c.bye && (!c.personWhite || !c.personBlue))
+  const oppLine = isBye
     ? `<span class="opp">Bye — advances</span>`
     : `<span class="opp">vs ${esc(opp.name)}</span>` + (opp.club ? ` <span class="sub">(${esc(opp.club)})</span>` : "");
+
+  // belt the judoka wears for this bout (white side = white belt, blue side = red belt)
+  const beltSub = (!isBye && side)
+    ? ` · <span class="belt-mini ${belt(side).cls}">${side === "white" ? "White" : "Red"}</span>`
+    : "";
 
   const whenCol = c.isFinished
     ? `<span class="sub">done</span>`
@@ -499,7 +618,7 @@ function fightRow(c, pid) {
 
   tr.innerHTML =
     `<td class="stcol"><span class="dot ${dotCls}"></span></td>` +
-    `<td>${oppLine}<div class="sub">${esc(ctx)}${matCol ? " · " + matCol : ""}</div></td>` +
+    `<td>${oppLine}<div class="sub">${esc(ctx)}${matCol ? " · " + matCol : ""}${beltSub}</div></td>` +
     `<td style="text-align:right;white-space:nowrap">${resHtml || whenCol}</td>`;
   return tr;
 }
@@ -509,7 +628,7 @@ function fighterCard(f) {
   const head = el("div", "head");
   head.innerHTML = `<div><div class="nm">${esc(f.name)}</div><div class="club">${esc(f.club || "")}</div></div>`;
   const rm = el("button", "btn small ghost rm", "Remove");
-  rm.onclick = () => { follow = follow.filter(y => y.id !== f.id); saveFollow(); renderChips(); renderResults(); };
+  rm.onclick = () => removeFollow(f.id);
   head.appendChild(rm);
   card.appendChild(head);
 
@@ -527,7 +646,9 @@ function fighterCard(f) {
     // queue position is the headline and the planned time is shown as context.
     const isLive = onMat && ahead === 0;
     const nf = el("div", "nextfight" + (isLive ? " live" : ""));
-    const opp = opponentOf(next, sideOf(next, f.id));
+    const nextSide = sideOf(next, f.id);
+    const opp = opponentOf(next, nextSide);
+    const nb = belt(nextSide);
 
     let headline;
     if (onMat && ahead === 0) headline = "On the mat now / next up";
@@ -543,6 +664,7 @@ function fighterCard(f) {
       `<div class="toprow">` +
         (isLive ? `<span class="pulse"></span>` : "") +
         `<span class="matbadge">${onMat ? "Mat " + next.mat : "Mat —"}</span>` +
+        `<span class="belt ${nb.cls}">${nb.label}</span>` +
         `<span class="when">${esc(headline)}</span>` +
       `</div>` +
       `<div class="vs">vs <strong>${esc(opp.name)}</strong>${opp.club ? ` <span class="eta">(${esc(opp.club)})</span>` : ""}</div>` +
@@ -625,6 +747,71 @@ function addFollow(p) {
   $("#acList").classList.add("hidden");
   renderChips();
   renderResults();
+  renderClubMembers();
+}
+function removeFollow(id) {
+  follow = follow.filter(f => f.id !== id);
+  saveFollow();
+  renderChips();
+  renderResults();
+  renderClubMembers();
+}
+
+/* ----------------------- browse by club --------------------------- */
+function renderClubSelect() {
+  const sel = $("#clubSelect");
+  const prev = sel.value;
+  const clubs = {};
+  for (const p of personIndex) { if (p.club) clubs[p.club] = (clubs[p.club] || 0) + 1; }
+  const names = Object.keys(clubs).sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = "";
+  const ph = el("option"); ph.value = ""; ph.textContent = "Browse a club…"; sel.appendChild(ph);
+  for (const n of names) {
+    const o = el("option");
+    o.value = n;
+    o.textContent = n + " (" + clubs[n] + ")";
+    sel.appendChild(o);
+  }
+  sel.value = (prev && clubs[prev]) ? prev : "";
+}
+
+function renderClubMembers() {
+  const club = $("#clubSelect").value;
+  const box = $("#clubMembers");
+  box.innerHTML = "";
+  if (!club) return;
+  const members = personIndex
+    .filter(p => p.club === club)
+    .sort((a, b) => a.family.localeCompare(b.family) || a.given.localeCompare(b.given));
+  const followedIds = new Set(follow.map(f => f.id));
+  const notFollowed = members.filter(m => !followedIds.has(m.id));
+
+  const head = el("div", "club-head");
+  head.innerHTML = `<span class="ttl">${members.length} judoka${members.length > 1 ? "s" : ""} in ${esc(club)}</span>`;
+  const addAll = el("button", "btn small primary");
+  addAll.textContent = notFollowed.length ? "Add all (" + notFollowed.length + ")" : "All added ✓";
+  addAll.disabled = !notFollowed.length;
+  addAll.onclick = () => {
+    for (const m of notFollowed) follow.push({ id: m.id, name: m.name, club: m.club });
+    saveFollow();
+    renderChips();
+    renderResults();
+    renderClubMembers();
+  };
+  head.appendChild(addAll);
+  box.appendChild(head);
+
+  for (const m of members) {
+    const followed = followedIds.has(m.id);
+    const row = el("div", "member");
+    const cats = [...m.cats].filter(Boolean).slice(0, 3).join(", ");
+    row.innerHTML = `<div><span class="nm">${esc(m.name)}</span>${cats ? ` <span class="det">${esc(cats)}</span>` : ""}</div>`;
+    const b = el("button", "btn small" + (followed ? "" : " primary"));
+    b.textContent = followed ? "Added ✓" : "Add";
+    b.onclick = () => { followed ? removeFollow(m.id) : addFollow(m); };
+    row.appendChild(b);
+    box.appendChild(row);
+  }
 }
 
 /* ----------------------------- refresh ---------------------------- */
@@ -635,6 +822,8 @@ async function refresh(showSpinner) {
     await loadContests();
     renderChips();
     renderResults();
+    renderClubSelect();
+    renderClubMembers();
     status.textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
       + " · " + personIndex.length + " competitors · " + contests.filter(c => c.isFinished).length + "/" + contests.length + " bouts done";
   } catch (e) {
@@ -668,32 +857,74 @@ function showComp() {
   $("#subtitle").textContent = "Follow your fighters — see when & where they fight";
   $("#compStatus").classList.add("hidden");
   $("#compErr").classList.add("hidden");
-  renderCompPicker();
+  loadFeatured();
 }
+function fmtDateRange(from, to) {
+  if (!from) return "";
+  const opt = { day: "numeric", month: "short" };
+  const a = new Date(from);
+  if (isNaN(a)) return "";
+  const b = to ? new Date(to) : null;
+  if (b && !isNaN(b) && b.toDateString() !== a.toDateString())
+    return a.toLocaleDateString([], opt) + "–" + b.toLocaleDateString([], opt);
+  return a.toLocaleDateString([], opt);
+}
+function compOptionLabel(c) {
+  const where = [c.place, c.country].filter(Boolean).join(", ");
+  const date = fmtDateRange(c.dateFrom, c.dateTo);
+  let s = c.title || c.slug;
+  if (where) s += " — " + where;
+  if (date) s += " · " + date;
+  return s;
+}
+
 function renderCompPicker() {
   const r = getRecent();
   const wrap = $("#compPickerWrap");
   const sel = $("#compSelect");
   const entry = $("#compEntry");
-  if (!r.length) {
-    // nothing saved yet — just show the URL/code box
-    wrap.classList.add("hidden");
-    entry.classList.remove("hidden");
-    return;
-  }
   wrap.classList.remove("hidden");
   sel.innerHTML = "";
+
   const ph = el("option"); ph.value = ""; ph.textContent = "Select a tournament…"; sel.appendChild(ph);
-  for (const c of r) {
-    const o = el("option");
-    o.value = c.slug;
-    o.textContent = (c.title || c.slug) + (c.place ? " — " + c.place : "");
-    sel.appendChild(o);
+
+  // Recently used (loaded by this browser before)
+  if (r.length) {
+    const g = el("optgroup"); g.label = "Recently used";
+    for (const c of r) {
+      const o = el("option");
+      o.value = "slug:" + c.slug;
+      o.textContent = compOptionLabel(c);
+      g.appendChild(o);
+    }
+    sel.appendChild(g);
   }
-  const nw = el("option"); nw.value = "__new__"; nw.textContent = "➕  Enter a new tournament…"; sel.appendChild(nw);
+
+  // Featured tournaments from the API
+  const g2 = el("optgroup");
+  if (featuredState === "loading") {
+    g2.label = "Featured";
+    const o = el("option"); o.value = ""; o.disabled = true; o.textContent = "Loading featured tournaments…"; g2.appendChild(o);
+    sel.appendChild(g2);
+  } else if (featured.length) {
+    g2.label = "Featured tournaments";
+    const recentSlugs = new Set(r.map(c => c.slug));
+    for (const c of featured) {
+      if (recentSlugs.has(c.slug)) continue; // already shown under "Recently used"
+      const o = el("option");
+      o.value = "feat:" + c.id;
+      o.textContent = compOptionLabel(c);
+      g2.appendChild(o);
+    }
+    if (g2.childElementCount) sel.appendChild(g2);
+  }
+
+  const nw = el("option"); nw.value = "__new__"; nw.textContent = "➕  Enter a new tournament by URL / code…"; sel.appendChild(nw);
+
   sel.value = "";
-  // keep the URL box hidden until the user explicitly chooses "new"
-  entry.classList.add("hidden");
+  // Show the URL box by default only when there's nothing to pick from yet.
+  if (r.length || featured.length || featuredState === "loading") entry.classList.add("hidden");
+  else entry.classList.remove("hidden");
 }
 
 async function doLoad(rawInput) {
@@ -717,17 +948,77 @@ async function doLoad(rawInput) {
   }
 }
 
+/* ----------------------------- export ----------------------------- */
+function buildExportText() {
+  const lines = [];
+  lines.push(comp.title);
+  const where = [comp.place, comp.country].filter(Boolean).join(", ");
+  if (where) lines.push(where);
+  lines.push(new Date().toLocaleString());
+  lines.push("");
+  if (!follow.length) {
+    lines.push("(no fighters followed yet)");
+    return lines.join("\n");
+  }
+  const rows = follow
+    .map(f => Object.assign({ name: f.name }, fighterRecord(f.id)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  for (const r of rows) lines.push(`${r.name} ${r.w} win - ${r.l} lost`);
+  return lines.join("\n");
+}
+
+function openExport() {
+  $("#exportText").value = buildExportText();
+  $("#exportMsg").textContent = "";
+  $("#exportModal").classList.remove("hidden");
+  const ta = $("#exportText");
+  ta.focus(); ta.setSelectionRange(0, ta.value.length);
+}
+function closeExport() { $("#exportModal").classList.add("hidden"); }
+
+async function copyExport() {
+  const text = $("#exportText").value;
+  try {
+    await navigator.clipboard.writeText(text);
+    $("#exportMsg").textContent = "Copied!";
+  } catch (e) {
+    // fallback for non-secure contexts (file://, plain http)
+    const ta = $("#exportText");
+    ta.focus(); ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand && document.execCommand("copy");
+    $("#exportMsg").textContent = ok ? "Copied!" : "Press Ctrl/Cmd+C to copy";
+  }
+}
+function downloadExport() {
+  const text = $("#exportText").value;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = ((comp && comp.slug) || "judo") + "-results.txt";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  $("#exportMsg").textContent = "Downloaded";
+}
+
 /* ------------------------------ wire ------------------------------ */
+$("#btnExport").onclick = openExport;
+$("#exportClose").onclick = closeExport;
+$("#exportCopy").onclick = copyExport;
+$("#exportDownload").onclick = downloadExport;
+$("#exportModal").addEventListener("click", e => { if (e.target.id === "exportModal") closeExport(); });
 $("#btnLoadComp").onclick = () => doLoad($("#compInput").value);
 $("#compInput").addEventListener("keydown", e => { if (e.key === "Enter") doLoad($("#compInput").value); });
 $("#compSelect").onchange = e => {
   const v = e.target.value;
   const entry = $("#compEntry");
   if (v === "__new__") { entry.classList.remove("hidden"); $("#compInput").value = ""; $("#compInput").focus(); }
-  else if (v) { entry.classList.add("hidden"); doLoad(v); }
+  else if (v.startsWith("feat:")) { entry.classList.add("hidden"); enterFeatured(+v.slice(5)); }
+  else if (v.startsWith("slug:")) { entry.classList.add("hidden"); doLoad(v.slice(5)); }
   else { entry.classList.add("hidden"); }
 };
 $("#btnChange").onclick = showComp;
+$("#clubSelect").onchange = renderClubMembers;
 $("#btnRefresh").onclick = () => refresh(true);
 $("#autoRefresh").onchange = startAuto;
 
@@ -752,6 +1043,7 @@ setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
 /* ----------------------------- startup ---------------------------- */
 (function init() {
   renderCompPicker();
+  loadFeatured();
   // deep-link support: index.html#tournoi_ecoliers_sierre_2026
   const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (hash) { $("#compInput").value = hash; doLoad(hash); }
