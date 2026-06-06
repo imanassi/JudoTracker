@@ -5,7 +5,9 @@ tournament. Pick a tournament, add the fighters you care about, and see — for 
 of them — **which mat they're on, how many fights ahead of them in the queue, who
 they fight, and their results so far**. The data auto-refreshes while the event runs.
 
-It's one self-contained file: [`index.html`](index.html). No build step, no dependencies.
+The app itself is one self-contained file — [`index.html`](index.html), no build step,
+no dependencies. The extra files (`manifest.webmanifest`, `sw.js`, and the `*.png`
+icons) just make it **installable on a phone** (see *Install it on your phone* below).
 
 ## How to use
 
@@ -54,10 +56,29 @@ from `file://` may be blocked by the browser.
   ```
   then visit <http://localhost:8777/>. (A ready-made config for the editor's
   preview is in `.claude/launch.json`.)
-- **On your phone (at the venue):** host `index.html` on any static host
+- **On your phone (at the venue):** host the folder on any static host
   (GitHub Pages, Netlify, etc.) and open it in the phone's browser. Or run the
   command above on a laptop and browse to the laptop's LAN IP from the phone
   (same Wi-Fi).
+
+## Install it on your phone (no URL typing)
+
+The app is a **PWA**, so it can be added to the home screen and launched full-screen
+like a normal app — no browser, no URL.
+
+**Requirement:** it must be served over **HTTPS** (the install/offline features don't
+work from `file://` or plain-http LAN addresses). The easiest free option is
+**GitHub Pages** or **Netlify** — upload the whole folder (it must include
+`index.html`, `manifest.webmanifest`, `sw.js`, and the four `*.png` icons), then open
+the resulting `https://…` link on your phone.
+
+Then:
+- **Android (Chrome):** tap **⤓ Install app** in the header (or browser menu →
+  *Install app* / *Add to Home screen*).
+- **iPhone/iPad (Safari):** tap **Share** → **Add to Home Screen**.
+
+After that it has its own home-screen icon (the 柔 logo) and opens full-screen. The app
+itself works offline; the live results still need an internet connection to refresh.
 
 ## How it works
 

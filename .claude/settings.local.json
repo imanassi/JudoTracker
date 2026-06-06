@@ -19,7 +19,9 @@
       "Bash(python -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
       "Bash(python -c \"import cairosvg; print\\('cairosvg ok'\\)\")",
       "Read(//c/Windows/Fonts//**)",
-      "Bash(python -m pip install --quiet Pillow)"
+      "Bash(python -m pip install --quiet Pillow)",
+      "Bash(cat)",
+      "Bash(python /tmp/genicons.py)"
     ]
   }
 }

@@ -2,8 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Judo Fighter Tracker</title>
+
+<!-- Installable web app (PWA) -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#0f1420" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Judo Tracker" />
 <style>
   :root {
     --bg: #0f1420;
@@ -197,6 +207,7 @@
         <p class="sub" id="subtitle">Follow your fighters — see when &amp; where they fight</p>
       </div>
       <div class="spacer"></div>
+      <button class="btn small primary hidden" id="btnInstall">⤓ Install app</button>
       <button class="btn small ghost hidden" id="btnChange">Change tournament</button>
     </div>
   </div>
@@ -1039,6 +1050,41 @@ document.addEventListener("click", e => {
 
 // re-render times every minute so "in X min" stays fresh
 setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
+
+/* --------------------- installable app (PWA) ---------------------- */
+(function pwa() {
+  // register the service worker (enables offline launch + install)
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+  const btn = $("#btnInstall");
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  let deferred = null;
+
+  // Android / desktop Chrome: capture the prompt and show our own button.
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferred = e;
+    if (!standalone) btn.classList.remove("hidden");
+  });
+  btn.onclick = async () => {
+    if (deferred) {
+      deferred.prompt();
+      await deferred.userChoice;
+      deferred = null;
+      btn.classList.add("hidden");
+    } else {
+      // iOS Safari has no install API — guide the user instead.
+      alert("To install: tap the Share button, then “Add to Home Screen”.");
+    }
+  };
+  window.addEventListener("appinstalled", () => btn.classList.add("hidden"));
+
+  // iOS: no beforeinstallprompt, so offer the button with manual instructions
+  // (only when running in a normal browser tab, not already installed).
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isIOS && !standalone) btn.classList.remove("hidden");
+})();
 
 /* ----------------------------- startup ---------------------------- */
 (function init() {
