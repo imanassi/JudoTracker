@@ -190,6 +190,9 @@
   .menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
   .menu-name { font-weight: 700; font-size: 15px; margin: 3px 0 10px; word-break: break-word; }
   .menu .btn { width: 100%; }
+  .menu-sep { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+  .menu-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .menu-hint.ok { color: var(--green); }
   .collapse-head { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; color: inherit; cursor: pointer; padding: 0; text-align: left; }
   .collapse-head .chev { margin-left: auto; color: var(--muted); transition: transform .2s; font-size: 13px; }
   .collapse-head[aria-expanded="false"] .chev { transform: rotate(-90deg); }
@@ -240,6 +243,9 @@
           <div class="menu-label">Tournament</div>
           <div class="menu-name" id="menuCompName"></div>
           <button class="btn small" id="btnChange">Change tournament</button>
+          <hr class="menu-sep" />
+          <button class="btn small ghost" id="btnProxy">Reliable data connection…</button>
+          <div class="menu-hint" id="proxyState"></div>
         </div>
       </div>
     </div>
@@ -403,23 +409,30 @@ async function fetchWithTimeout(url, opts) {
 async function jmFetch(url, opts) {
   opts = opts || {};
   const isPost = opts.method && opts.method.toUpperCase() !== "GET";
-  // 1) direct (works only if the page is hosted on an origin the API trusts)
-  try {
-    const r = await fetchWithTimeout(url, opts);
-    if (r.ok) return await r.json();
-  } catch (e) { /* fall through to proxies */ }
-  // 2) proxies — each with its own timeout so a slow/throttling one is skipped
+
+  // Candidate URLs: a direct call (works only on a trusted origin) plus every
+  // eligible proxy.
+  const candidates = [url];
   for (const p of activeProxies()) {
     if (isPost && !p.post) continue; // this proxy can't forward a POST body
-    try {
-      const r = await fetchWithTimeout(p.make(url), opts);
-      if (r.ok) {
-        const txt = await r.text();
-        try { return JSON.parse(txt); } catch (_) { /* not json, try next */ }
-      }
-    } catch (e) { /* next proxy */ }
+    candidates.push(p.make(url));
   }
-  throw new Error("Could not reach the JudoManager data service.");
+
+  // Race them all in parallel — first one to return valid JSON wins. This is far more
+  // reliable than trying them one-by-one: which proxy works varies by device and
+  // network, and a slow or dead one no longer blocks the ones that do work.
+  const attempts = candidates.map(c =>
+    fetchWithTimeout(c, opts).then(async r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const txt = await r.text();
+      return JSON.parse(txt); // throws if the proxy returned an error/HTML page
+    })
+  );
+  try {
+    return await Promise.any(attempts);
+  } catch (e) {
+    throw new Error("Could not reach the JudoManager data service.");
+  }
 }
 
 function fmtClock(d) {
@@ -516,10 +529,74 @@ async function loadRoster() {
   }
 }
 
-// The schedule. Empty until the draw is made; we still want the roster to show.
+// The schedule. The draw is organised into "fragments" (time blocks); for many
+// tournaments the plain Contest/Find returns nothing and the contests only come back
+// when queried per fragment (and those payloads are smaller, so they proxy reliably).
 async function loadContests() {
-  const data = await jmFetch(`${API}/Contest/Find?IdCompetition=${comp.id}&Language=en`);
+  const find = frag => `${API}/Contest/Find?IdCompetition=${comp.id}` +
+    (frag != null ? `&IdFragment=${frag}` : "") + `&Language=en`;
+
+  let fragments = [];
+  try {
+    const f = await jmFetch(`${API}/Competition/GetCompCompetitionsFragments?IdCompetition=${comp.id}`);
+    fragments = Array.isArray(f) ? f : [];
+  } catch (e) { /* couldn't list fragments — fall back to the plain query below */ }
+
+  if (fragments.length) {
+    const settled = await Promise.allSettled(fragments.map(fr => jmFetch(find(fr.idFragment))));
+    const ok = settled.filter(s => s.status === "fulfilled");
+    if (!ok.length) throw new Error("schedule unreachable"); // every fragment failed
+    const map = new Map();
+    for (const s of ok) for (const c of (s.value && s.value.contests) || []) {
+      if (c && c.idContest != null) map.set(c.idContest, c);
+    }
+    if (map.size) { contests = [...map.values()]; saveScheduleCache(); return; }
+    // fragments exist but hold no contests yet → fall through to the plain query
+  }
+
+  const data = await jmFetch(find(null));
   contests = (data && data.contests) ? data.contests : [];
+  saveScheduleCache();
+}
+
+/* Persist a slimmed copy of the schedule so the "next match" still shows after a
+   reload / app relaunch, or when a refresh fails — instead of going blank. */
+function schedCacheKey() { return "jm_sched_" + (comp ? comp.id : "x"); }
+function slimPerson(p) {
+  if (!p) return null;
+  return {
+    idPerson: p.idPerson, familyName: p.familyName, givenName: p.givenName,
+    club: p.club ? { name: p.club.name || p.club.nameOfficial } : null,
+    country: p.country ? { short: p.country.short } : null,
+  };
+}
+function slimScore(s) {
+  if (!s) return null;
+  return { ippon: s.ippon, wazaari: s.wazaari, yuko: s.yuko, penalty: s.penalty, result: s.result };
+}
+function saveScheduleCache() {
+  if (!contests.length) return;
+  try {
+    const slim = contests.map(c => ({
+      idContest: c.idContest, isFinished: c.isFinished, idWinner: c.idWinner, bye: c.bye,
+      mat: c.mat, fightNo: c.fightNo, roundName: c.roundName,
+      zacetekPlaniran: c.zacetekPlaniran, timeStart: c.timeStart,
+      weightCategory: c.weightCategory ? {
+        name: c.weightCategory.name,
+        ageCategory: c.weightCategory.ageCategory
+          ? { shortName: c.weightCategory.ageCategory.shortName, gender: c.weightCategory.ageCategory.gender } : null,
+      } : null,
+      personWhite: slimPerson(c.personWhite), personBlue: slimPerson(c.personBlue),
+      scoreWhite: slimScore(c.scoreWhite), scoreBlue: slimScore(c.scoreBlue),
+    }));
+    localStorage.setItem(schedCacheKey(), JSON.stringify({ t: Date.now(), c: slim }));
+  } catch (e) { /* quota exceeded or unavailable — caching is best-effort */ }
+}
+function loadScheduleCache() {
+  try {
+    const o = JSON.parse(localStorage.getItem(schedCacheKey()));
+    return o && Array.isArray(o.c) ? o : null;
+  } catch (e) { return null; }
 }
 
 function buildPersonIndex() {
@@ -973,9 +1050,9 @@ async function refresh(showSpinner) {
   }
   const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const done = contests.filter(c => c.isFinished).length;
-  const sched = contests.length
-    ? done + "/" + contests.length + " bouts done"
-    : (schedErr ? "schedule couldn't load — retrying" : "draw not published yet");
+  const sched = !contests.length
+    ? (schedErr ? "schedule couldn't load — retrying" : "draw not published yet")
+    : (schedErr ? "showing last schedule — couldn't refresh" : done + "/" + contests.length + " bouts done");
   status.textContent = "Updated " + time + " · " + personIndex.length + " competitors · " + sched;
 }
 function startAuto() {
@@ -1010,9 +1087,16 @@ function showMain() {
   // Keep the header compact: the tournament name lives in the menu, not the subtitle.
   $("#menuWrap").classList.remove("hidden");
   $("#menuCompName").textContent = [comp.title, comp.place].filter(Boolean).join(" · ");
+  updateProxyState();
   initAddPanel();
   renderHero();
   renderChips();
+  // Seed the last-known schedule from cache so the next match shows immediately,
+  // before (and even if) the live refresh completes.
+  if (!contests.length) {
+    const cached = loadScheduleCache();
+    if (cached) contests = cached.c;
+  }
   renderResults();
   refresh(true);
   startAuto();
@@ -1020,6 +1104,28 @@ function showMain() {
 function closeHeaderMenu() {
   $("#headerMenu").classList.add("hidden");
   $("#btnMenu").setAttribute("aria-expanded", "false");
+}
+function getProxy() { try { return (localStorage.getItem("jm_proxy") || "").trim(); } catch (e) { return ""; } }
+function updateProxyState() {
+  const node = $("#proxyState");
+  if (!node) return;
+  if (getProxy()) { node.textContent = "Using your own proxy ✓"; node.classList.add("ok"); }
+  else { node.textContent = "The shared connection can be unreliable. For a rock-solid link, set up your own (see cloudflare-worker.js)."; node.classList.remove("ok"); }
+}
+function configureProxy() {
+  const cur = getProxy();
+  const v = prompt(
+    "Your own data proxy makes the app reliable on every device.\n\n" +
+    "Paste the URL, ending in ?url= (deploy cloudflare-worker.js — instructions are in that file).\n\n" +
+    "Leave blank to go back to the shared public proxies.",
+    cur
+  );
+  if (v === null) return; // cancelled
+  const val = v.trim();
+  try { if (val) localStorage.setItem("jm_proxy", val); else localStorage.removeItem("jm_proxy"); } catch (e) {}
+  updateProxyState();
+  closeHeaderMenu();
+  if (comp) { entries = []; refresh(true); } // reload over the new connection
 }
 function showComp() {
   stopAuto();
@@ -1201,6 +1307,7 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#menuWrap")) closeHeaderMenu();
 });
 $("#addToggle").onclick = () => setAddOpen(!addOpen);
+$("#btnProxy").onclick = configureProxy;
 $("#clubSelect").onchange = renderClubMembers;
 $("#btnRefresh").onclick = () => refresh(true);
 $("#autoRefresh").onchange = startAuto;

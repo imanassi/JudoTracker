@@ -90,11 +90,15 @@ itself works offline; the live results still need an internet connection to refr
   `POST https://datav2.judomanager.com/api/Competition/GetCompetitors`
   `{ "idCompetition": <id>, "language": "en" }`. This works **before the draw is
   published**, so you can pick fighters and browse clubs for an upcoming event.
-- Loads the schedule with
-  `GET https://datav2.judomanager.com/api/Contest/Find?IdCompetition=<id>&Language=en`,
-  then does all the filtering (which fighter, which mat, results) in the browser. This
-  is empty until the draw is made; the roster still works in the meantime, and the two
-  loads are independent (one can fail without breaking the other).
+- Loads the schedule from `Contest/Find`, **per fragment**: it first gets the
+  competition's time-blocks (`Competition/GetCompCompetitionsFragments`) and then
+  queries `Contest/Find?IdCompetition=<id>&IdFragment=<frag>` for each. This matters —
+  for many tournaments the plain `Contest/Find` (no fragment) returns *empty* and the
+  contests only come back per fragment; the per-fragment payloads are also smaller, so
+  they proxy more reliably. All the filtering (which fighter, which mat, results) is
+  done in the browser. The schedule is empty until the draw is made; the roster still
+  works in the meantime, and the two loads are independent (one can fail without
+  breaking the other).
 - Tracks each fighter by their stable `idPerson`, so name typos don't matter.
 - **"When" they fight:** the API's scheduled clock times are often stale (events run
   behind), so the app leads with the **mat queue position** ("~N fights ahead on this
@@ -105,23 +109,32 @@ itself works offline; the live results still need an internet connection to refr
 
 `datav2.judomanager.com` only allows requests from `portal.judomanager.com`, so a
 standalone page can't call it directly — requests are routed through a CORS proxy.
-The app tries several public ones in order (`corsproxy.io`, `api.codetabs.com`,
-`cors.eu.org`, `allorigins.win`), each with its own timeout so a slow or rate-limited
-one is skipped automatically. `corsproxy.io` is first because it's reliable and is the
-only one that forwards the `POST` roster request; the others are fallbacks for the
-**large schedule payload** (~3–5 MB for a big event) that `corsproxy.io` rejects.
+The app **races several public proxies in parallel** (`corsproxy.io`,
+`api.codetabs.com`, `cors.eu.org`, `allorigins.win`) and uses whichever responds
+first. Racing matters because *which* proxy works varies by device and network — one
+phone may get through `codetabs` while another can't — and a slow/dead proxy no longer
+blocks the others. `corsproxy.io` handles the small calls (and is the only one that
+forwards the `POST` roster); the others cover the **large schedule payload** (~3–5 MB
+for a big event) that `corsproxy.io` rejects.
 
-This means **the public-proxy path depends on a third party being up.** If the roster
-loads but the schedule shows *"schedule couldn't load — retrying"*, a proxy is
-struggling with the large payload — it auto-retries, or press *Refresh now*.
+To reduce blank screens, the app also **caches the last loaded schedule** (per
+tournament) — so the "next match" still shows after a reload / app relaunch, and when a
+refresh fails, instead of going blank. The status line then reads
+*"showing last schedule — couldn't refresh"*.
 
-**For 100% reliability, run your own proxy** (recommended if you'll use this a lot):
-deploy [`cloudflare-worker.js`](cloudflare-worker.js) — a ~30-line free Cloudflare
-Worker — and point the app at it. It handles every call (including POST and the large
-schedule) and removes all dependence on the public proxies. Two ways to set it:
+Still, **the public-proxy path depends on a third party being up**, and on a busy
+event day they can be unreliable from some networks. **For a rock-solid connection on
+every device, run your own proxy** — strongly recommended if more than one person will
+use this:
 
-- edit `index.html`: `const CUSTOM_PROXY = "https://…workers.dev/?url=";`, or
-- run once in the browser console:
-  `localStorage.setItem('jm_proxy', 'https://…workers.dev/?url=')`
+1. Deploy [`cloudflare-worker.js`](cloudflare-worker.js) — a ~30-line free Cloudflare
+   Worker (instructions are in the file header, ~2 minutes).
+2. Point the app at it, either:
+   - **in the app:** open the header menu (☰) → **Reliable data connection…** and paste
+     the worker URL (ending in `?url=`) — no file editing, and it syncs to that device, or
+   - edit `index.html`: `const CUSTOM_PROXY = "https://…workers.dev/?url=";`
+
+Once set, the app uses your worker first (it handles POST and the large schedule), and
+the public proxies become irrelevant.
 
 The file's header has step-by-step deploy instructions.
