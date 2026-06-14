@@ -67,6 +67,10 @@
   .btn.primary:hover { background: #3d7af0; }
   .btn.ghost { background: transparent; }
   .btn.small { padding: 6px 10px; font-size: 13px; }
+  #btnRefresh { font-weight: 700; box-shadow: 0 2px 10px rgba(79,140,255,.35); }
+  #btnRefresh #refreshIcon { display: inline-block; }
+  #btnRefresh.loading #refreshIcon { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   input[type="text"], input[type="search"] {
     background: #0c1119; color: var(--text); border: 1px solid var(--border);
     border-radius: 9px; padding: 11px 13px; font-size: 15px; width: 100%;
@@ -269,8 +273,8 @@
       <label class="status" style="display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="autoRefresh" checked /> auto-refresh
       </label>
-      <button class="btn small" id="btnExport">Export</button>
-      <button class="btn small" id="btnRefresh">Refresh now</button>
+      <button class="btn small ghost" id="btnExport">Export</button>
+      <button class="btn primary" id="btnRefresh"><span id="refreshIcon">↻</span> Refresh now</button>
     </div>
 
     <div id="results"></div>
@@ -304,18 +308,34 @@ const API = "https://datav2.judomanager.com/api";
 // large bodies and adds CORS headers, so it is tried first; the smaller ones are
 // fallbacks for the lightweight endpoints. A direct call is attempted first in
 // case the page is ever hosted somewhere the API trusts.
+// `post` marks proxies that forward POST requests with a body (needed for the
+// entries endpoint). corsproxy is first: it is reliably up, forwards POST, and
+// handles the small/medium calls; codetabs / cors.eu.org are GET-only fallbacks
+// that cope with the very large contest payload corsproxy rejects.
 const PROXIES = [
-  u => "https://cors.eu.org/" + u,
-  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
-  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
-  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  { make: u => "https://corsproxy.io/?url=" + encodeURIComponent(u), post: true },
+  { make: u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u), post: false },
+  { make: u => "https://cors.eu.org/" + u, post: false },
+  { make: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u), post: false },
 ];
 const FETCH_TIMEOUT_MS = 15000;
 const REFRESH_MS = 60000;
 
+// Optional: your OWN proxy for 100% reliability (no dependence on the public ones).
+// Deploy `cloudflare-worker.js` (see README) and put its URL here, ending with
+// "?url=" — e.g. "https://judo-proxy.yourname.workers.dev/?url=". It is tried first
+// and handles every call (including POST and the large schedule). You can also set it
+// at runtime: localStorage.setItem('jm_proxy', 'https://…workers.dev/?url=').
+const CUSTOM_PROXY = "";
+function activeProxies() {
+  const cp = ((typeof localStorage !== "undefined" && localStorage.getItem("jm_proxy")) || CUSTOM_PROXY || "").trim();
+  return cp ? [{ make: u => cp + encodeURIComponent(u), post: true }, ...PROXIES] : PROXIES;
+}
+
 /* ----------------------------- state ------------------------------ */
 let comp = null;            // {id, slug, title, place, country}
-let contests = [];          // raw contests array
+let entries = [];           // registered competitors (works before the draw)
+let contests = [];          // raw contests array (the schedule; empty until drawn)
 let personIndex = [];       // [{id, name, family, given, club, country, cats:Set}]
 let follow = [];            // [{id, name, club}]
 let refreshTimer = null;
@@ -344,16 +364,19 @@ async function fetchWithTimeout(url, opts) {
   try { return await fetch(url, Object.assign({ signal: ac.signal }, opts)); }
   finally { clearTimeout(id); }
 }
-async function jmFetch(url) {
+async function jmFetch(url, opts) {
+  opts = opts || {};
+  const isPost = opts.method && opts.method.toUpperCase() !== "GET";
   // 1) direct (works only if the page is hosted on an origin the API trusts)
   try {
-    const r = await fetchWithTimeout(url, { headers: { "Accept": "application/json" } });
+    const r = await fetchWithTimeout(url, opts);
     if (r.ok) return await r.json();
   } catch (e) { /* fall through to proxies */ }
   // 2) proxies — each with its own timeout so a slow/throttling one is skipped
-  for (const p of PROXIES) {
+  for (const p of activeProxies()) {
+    if (isPost && !p.post) continue; // this proxy can't forward a POST body
     try {
-      const r = await fetchWithTimeout(p(url));
+      const r = await fetchWithTimeout(p.make(url), opts);
       if (r.ok) {
         const txt = await r.text();
         try { return JSON.parse(txt); } catch (_) { /* not json, try next */ }
@@ -400,6 +423,7 @@ async function loadCompetition(slug) {
     country: info.country || "",
     dateFrom: info.dateFrom || null,
   };
+  entries = []; contests = []; personIndex = [];
   pushRecent(comp);
   loadFollow();
 }
@@ -434,42 +458,84 @@ function enterFeatured(id) {
   const e = featured.find(x => x.id === id);
   if (!e) return;
   comp = { id: e.id, slug: e.slug || ("id-" + e.id), title: e.title, place: e.place, country: e.country, dateFrom: e.dateFrom };
+  entries = []; contests = []; personIndex = [];
   pushRecent(comp);
   loadFollow();
   showMain();
 }
 
 /* ----------------------------- data ------------------------------- */
+// The registered competitors. This is the roster used for search / club browsing
+// and works even before the draw is published (when there are no contests yet).
+async function loadRoster() {
+  try {
+    const data = await jmFetch(`${API}/Competition/GetCompetitors`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idCompetition: comp.id, language: "en" }),
+    });
+    entries = Array.isArray(data) ? data : [];
+  } catch (e) {
+    entries = [];
+  }
+}
+
+// The schedule. Empty until the draw is made; we still want the roster to show.
 async function loadContests() {
   const data = await jmFetch(`${API}/Contest/Find?IdCompetition=${comp.id}&Language=en`);
   contests = (data && data.contests) ? data.contests : [];
-  buildPersonIndex();
 }
 
 function buildPersonIndex() {
   const map = new Map();
+  const add = (id, family, given, club, country, cat) => {
+    if (!id) return;
+    let e = map.get(id);
+    if (!e) {
+      e = {
+        id, family: family || "", given: given || "",
+        name: ((given || "") + " " + (family || "")).trim(),
+        club: club || "", country: country || "", cats: new Set(),
+      };
+      map.set(id, e);
+    } else {
+      if (!e.club && club) e.club = club;
+      if (!e.country && country) e.country = country;
+    }
+    if (cat) e.cats.add(cat);
+  };
+
+  // Primary source: the registered competitors (available before the draw).
+  for (const en of entries) {
+    const a = en.athlete;
+    if (!a || !a.idPerson) continue;
+    const club = (en.clubApplied && (en.clubApplied.name || en.clubApplied.nameOfficial))
+      || (a.club && (a.club.name || a.club.nameOfficial)) || "";
+    const country = (en.countryApplied && en.countryApplied.short) || (a.country && a.country.short) || "";
+    const cats = (en.dataByWeight || []).map(d => {
+      const wc = d.weightCategory, ac = wc && wc.ageCategory;
+      return ((ac ? ac.shortName + " " : "") + (wc ? wc.name || "" : "")).trim();
+    }).filter(Boolean);
+    if (cats.length) cats.forEach(c => add(a.idPerson, a.familyName, a.givenName, club, country, c));
+    else add(a.idPerson, a.familyName, a.givenName, club, country, null);
+  }
+
+  // Also fold in anyone present in the draw (covers the case where the roster
+  // endpoint is unavailable, so the app still works from contests alone).
   for (const c of contests) {
     for (const p of [c.personWhite, c.personBlue]) {
       if (!p || !p.idPerson) continue;
-      let e = map.get(p.idPerson);
-      if (!e) {
-        e = {
-          id: p.idPerson,
-          family: p.familyName || "",
-          given: p.givenName || "",
-          name: ((p.givenName || "") + " " + (p.familyName || "")).trim(),
-          club: (p.club && (p.club.name || p.club.nameOfficial)) || "",
-          country: (p.country && p.country.short) || "",
-          cats: new Set(),
-        };
-        map.set(p.idPerson, e);
-      }
+      const club = (p.club && (p.club.name || p.club.nameOfficial)) || "";
+      const country = (p.country && p.country.short) || "";
+      let cat = "";
       if (c.weightCategory) {
         const ac = c.weightCategory.ageCategory;
-        e.cats.add((ac ? ac.shortName + " " : "") + (c.weightCategory.name || ""));
+        cat = ((ac ? ac.shortName + " " : "") + (c.weightCategory.name || "")).trim();
       }
+      add(p.idPerson, p.familyName, p.givenName, club, country, cat || null);
     }
   }
+
   personIndex = [...map.values()].sort((a, b) => a.family.localeCompare(b.family));
 }
 
@@ -541,6 +607,21 @@ function fightsAhead(c) {
     else if (o.fightNo < c.fightNo) n++;
   }
   return n;
+}
+
+// Sort key for "who fights next": small = sooner.
+//  - on a mat: the queue position (0 = on the mat now), so 0,1,2,…
+//  - upcoming but no mat yet: ordered after all queued bouts, by planned time
+//  - no upcoming bout (finished / not drawn): last
+function nextBoutKey(pid) {
+  const up = fightsFor(pid).filter(c => !c.isFinished && c.personWhite && c.personBlue);
+  const next = up[0];
+  if (!next) return Number.POSITIVE_INFINITY;
+  const ahead = fightsAhead(next);
+  if (next.mat > 0 && ahead != null) return ahead;            // 0,1,2,…
+  const planned = plannedDate(next);
+  if (planned) return 1e6 + planned.getTime() / 60000;        // after queued, by time
+  return 1e15;                                                 // upcoming, timing unknown
 }
 
 /* ----------------------------- render ----------------------------- */
@@ -706,12 +787,13 @@ function renderResults() {
     box.appendChild(el("div", "card empty", "Add one or more fighters above to start tracking them."));
     return;
   }
-  // sort fighter cards: those with an upcoming fight first, by soonest
-  const withNext = follow.map(f => {
-    const up = fightsFor(f.id).filter(c => !c.isFinished && c.personWhite && c.personBlue);
-    const d = up[0] ? (plannedDate(up[0]) || new Date(8640000000000000)) : null;
-    return { f, soon: d ? d.getTime() : Infinity };
-  }).sort((a, b) => a.soon - b.soon);
+  // Sort so whoever fights next is on top. The reliable signal is the mat queue
+  // position (same as each card's headline): fewest fights ahead = soonest. Fighters
+  // not yet assigned to a mat fall back to their planned time, then everyone with no
+  // upcoming bout (finished / not drawn) goes last.
+  const withNext = follow
+    .map(f => ({ f, key: nextBoutKey(f.id) }))
+    .sort((a, b) => a.key - b.key);
 
   for (const x of withNext) box.appendChild(fighterCard(x.f));
 }
@@ -828,18 +910,33 @@ function renderClubMembers() {
 /* ----------------------------- refresh ---------------------------- */
 async function refresh(showSpinner) {
   const status = $("#statusLine");
-  try {
-    if (showSpinner) status.textContent = "Updating…";
-    await loadContests();
-    renderChips();
-    renderResults();
-    renderClubSelect();
-    renderClubMembers();
-    status.textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      + " · " + personIndex.length + " competitors · " + contests.filter(c => c.isFinished).length + "/" + contests.length + " bouts done";
-  } catch (e) {
-    status.textContent = "Update failed — will retry. (" + e.message + ")";
+  $("#btnRefresh").classList.add("loading");
+  if (showSpinner) status.textContent = "Updating…";
+  // Roster rarely changes — load it once per tournament; refresh the schedule each time.
+  // The two loads are independent: the roster (search / clubs) must still work even
+  // when the larger schedule payload can't be fetched, and vice-versa.
+  if (!entries.length) await loadRoster();
+  let schedErr = false;
+  try { await loadContests(); } catch (e) { schedErr = true; }
+
+  buildPersonIndex();
+  renderChips();
+  renderResults();
+  renderClubSelect();
+  renderClubMembers();
+
+  $("#btnRefresh").classList.remove("loading");
+
+  if (!entries.length && !contests.length) {
+    status.textContent = "Couldn't reach the data service — will retry. Check your connection.";
+    return;
   }
+  const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const done = contests.filter(c => c.isFinished).length;
+  const sched = contests.length
+    ? done + "/" + contests.length + " bouts done"
+    : (schedErr ? "schedule couldn't load — retrying" : "draw not published yet");
+  status.textContent = "Updated " + time + " · " + personIndex.length + " competitors · " + sched;
 }
 function startAuto() {
   stopAuto();
@@ -861,7 +958,7 @@ function showMain() {
 }
 function showComp() {
   stopAuto();
-  comp = null; contests = []; personIndex = [];
+  comp = null; entries = []; contests = []; personIndex = [];
   $("#screenMain").classList.add("hidden");
   $("#screenComp").classList.remove("hidden");
   $("#btnChange").classList.add("hidden");

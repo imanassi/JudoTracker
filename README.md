@@ -87,11 +87,16 @@ itself works offline; the live results still need an internet connection to refr
   (selecting one uses its `idCompetition`/`idExternal` directly — no extra lookup).
 - For a pasted code, resolves it to an internal id via
   `GET https://datav2.judomanager.com/api/Competition/Info?idExternal=<code>`.
-- Loads every contest with
+- Builds the roster (search + club browser) from the **registered competitors**:
+  `POST https://datav2.judomanager.com/api/Competition/GetCompetitors`
+  `{ "idCompetition": <id>, "language": "en" }`. This works **before the draw is
+  published**, so you can pick fighters and browse clubs for an upcoming event.
+- Loads the schedule with
   `GET https://datav2.judomanager.com/api/Contest/Find?IdCompetition=<id>&Language=en`,
-  then does all the filtering (which fighter, which mat, results) in the browser.
-- Builds the "follow" autocomplete from the real competitors in that contest list,
-  and tracks each fighter by their stable `idPerson` (so name typos don't matter).
+  then does all the filtering (which fighter, which mat, results) in the browser. This
+  is empty until the draw is made; the roster still works in the meantime, and the two
+  loads are independent (one can fail without breaking the other).
+- Tracks each fighter by their stable `idPerson`, so name typos don't matter.
 - **"When" they fight:** the API's scheduled clock times are often stale (events run
   behind), so the app leads with the **mat queue position** ("~N fights ahead on this
   mat"), computed from the not-yet-finished bouts on that mat, and shows the scheduled
@@ -99,18 +104,25 @@ itself works offline; the live results still need an internet connection to refr
 
 ### The CORS proxy caveat
 
-`datav2.judomanager.com` only allows requests from `portal.judomanager.com`, and the
-contest payload is ~3–5 MB — too big for most free CORS proxies. The app therefore
-tries, in order: a direct call, then [`api.codetabs.com`](https://codetabs.com/cors-proxy/cors-proxy.html)
-(which handles the large body), then `corsproxy.io` and `allorigins.win` for the
-smaller calls.
+`datav2.judomanager.com` only allows requests from `portal.judomanager.com`, so a
+standalone page can't call it directly — requests are routed through a CORS proxy.
+The app tries several public ones in order (`corsproxy.io`, `api.codetabs.com`,
+`cors.eu.org`, `allorigins.win`), each with its own timeout so a slow or rate-limited
+one is skipped automatically. `corsproxy.io` is first because it's reliable and is the
+only one that forwards the `POST` roster request; the others are fallbacks for the
+**large schedule payload** (~3–5 MB for a big event) that `corsproxy.io` rejects.
 
-The app tries several proxies in order (`cors.eu.org`, `api.codetabs.com`,
-`corsproxy.io`, `allorigins.win`), each with its own timeout so a slow or
-rate-limited one is skipped automatically.
+This means **the public-proxy path depends on a third party being up.** If the roster
+loads but the schedule shows *"schedule couldn't load — retrying"*, a proxy is
+struggling with the large payload — it auto-retries, or press *Refresh now*.
 
-This means **the app depends on a third-party proxy being up.** If loading ever fails,
-that's the likely cause — wait a moment and it auto-retries, or press *Refresh now*.
-For a permanent, self-owned setup, deploy a tiny proxy (e.g. a Cloudflare Worker) that
-forwards to `datav2.judomanager.com` with `Access-Control-Allow-Origin: *`, and put it
-first in the `PROXIES` list in `index.html`.
+**For 100% reliability, run your own proxy** (recommended if you'll use this a lot):
+deploy [`cloudflare-worker.js`](cloudflare-worker.js) — a ~30-line free Cloudflare
+Worker — and point the app at it. It handles every call (including POST and the large
+schedule) and removes all dependence on the public proxies. Two ways to set it:
+
+- edit `index.html`: `const CUSTOM_PROXY = "https://…workers.dev/?url=";`, or
+- run once in the browser console:
+  `localStorage.setItem('jm_proxy', 'https://…workers.dev/?url=')`
+
+The file's header has step-by-step deploy instructions.
