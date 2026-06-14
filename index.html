@@ -190,6 +190,9 @@
   .menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
   .menu-name { font-weight: 700; font-size: 15px; margin: 3px 0 10px; word-break: break-word; }
   .menu .btn { width: 100%; }
+  .collapse-head { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; color: inherit; cursor: pointer; padding: 0; text-align: left; }
+  .collapse-head .chev { margin-left: auto; color: var(--muted); transition: transform .2s; font-size: 13px; }
+  .collapse-head[aria-expanded="false"] .chev { transform: rotate(-90deg); }
   .empty { text-align: center; color: var(--muted); padding: 28px 12px; }
   .status { font-size: 12.5px; color: var(--muted); }
   .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -275,18 +278,24 @@
     <div class="card hero" id="hero"></div>
 
     <div class="card">
-      <div class="label">Add a fighter to follow</div>
-      <div class="ac-wrap">
-        <input type="search" id="searchInput" autocomplete="off"
-               placeholder="Type a name or club — pick from the list" />
-        <div class="ac-list hidden" id="acList"></div>
+      <button class="collapse-head" id="addToggle" aria-expanded="true">
+        <span class="label" style="margin:0">Add a fighter to follow</span>
+        <span class="chev" id="addChev">▾</span>
+      </button>
+
+      <div id="addBody">
+        <div class="ac-wrap" style="margin-top:10px">
+          <input type="search" id="searchInput" autocomplete="off"
+                 placeholder="Type a name or club — pick from the list" />
+          <div class="ac-list hidden" id="acList"></div>
+        </div>
+
+        <div class="or-sep">or browse a club</div>
+        <select class="jm" id="clubSelect"><option value="">Browse a club…</option></select>
+        <div id="clubMembers"></div>
       </div>
 
-      <div class="or-sep">or browse a club</div>
-      <select class="jm" id="clubSelect"><option value="">Browse a club…</option></select>
-      <div id="clubMembers"></div>
-
-      <div class="label" style="margin-top:16px">Following</div>
+      <div class="label" style="margin-top:16px" id="followLabel">Following</div>
       <div class="chips" id="followChips"></div>
       <div class="muted" style="font-size:13px;margin-top:10px" id="followHint">
         Tip: add several fighters — siblings, club mates, friends — and you'll see everyone's next bout at a glance.
@@ -369,6 +378,7 @@ let acActive = -1;
 let acItems = [];
 let featured = [];          // featured competitions from the API
 let featuredState = "idle"; // idle | loading | done | error
+let addOpen = true;         // whether the "add a fighter" panel is expanded
 
 /* --------------------------- utilities ---------------------------- */
 const $ = sel => document.querySelector(sel);
@@ -661,8 +671,11 @@ function renderHero() {
 function renderChips() {
   const box = $("#followChips");
   box.innerHTML = "";
+  const label = $("#followLabel"), hint = $("#followHint");
+  if (label) label.textContent = follow.length ? "Following (" + follow.length + ")" : "Following";
+  if (hint) hint.classList.toggle("hidden", follow.length > 0);
   if (!follow.length) {
-    box.innerHTML = `<span class="muted" style="font-size:13px">No fighters yet — search above to add one.</span>`;
+    box.innerHTML = `<span class="muted" style="font-size:13px">No fighters yet — open “Add a fighter” above.</span>`;
     return;
   }
   for (const f of follow) {
@@ -871,6 +884,7 @@ function addFollow(p) {
 function removeFollow(id) {
   follow = follow.filter(f => f.id !== id);
   saveFollow();
+  if (!follow.length) setAddOpen(true); // nothing left to track — reopen so they can add
   renderChips();
   renderResults();
   renderClubMembers();
@@ -970,6 +984,25 @@ function startAuto() {
 }
 function stopAuto() { if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
 
+/* ------------------ add-fighter panel collapse -------------------- */
+function applyAddOpen() {
+  $("#addBody").classList.toggle("hidden", !addOpen);
+  $("#addToggle").setAttribute("aria-expanded", String(addOpen));
+}
+function setAddOpen(open) {
+  addOpen = open;
+  try { localStorage.setItem("jm_add_open", open ? "1" : "0"); } catch (e) {}
+  applyAddOpen();
+}
+// Start collapsed once you already follow people; always open when the list is empty
+// so you can add some. A saved preference keeps it open if you chose to.
+function initAddPanel() {
+  let saved = null;
+  try { saved = localStorage.getItem("jm_add_open"); } catch (e) {}
+  addOpen = follow.length === 0 ? true : saved === "1";
+  applyAddOpen();
+}
+
 /* ----------------------------- screens ---------------------------- */
 function showMain() {
   $("#screenComp").classList.add("hidden");
@@ -977,6 +1010,7 @@ function showMain() {
   // Keep the header compact: the tournament name lives in the menu, not the subtitle.
   $("#menuWrap").classList.remove("hidden");
   $("#menuCompName").textContent = [comp.title, comp.place].filter(Boolean).join(" · ");
+  initAddPanel();
   renderHero();
   renderChips();
   renderResults();
@@ -1166,6 +1200,7 @@ $("#btnMenu").onclick = (e) => {
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#menuWrap")) closeHeaderMenu();
 });
+$("#addToggle").onclick = () => setAddOpen(!addOpen);
 $("#clubSelect").onchange = renderClubMembers;
 $("#btnRefresh").onclick = () => refresh(true);
 $("#autoRefresh").onchange = startAuto;
