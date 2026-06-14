@@ -38,7 +38,9 @@ icons) just make it **installable on a phone** (see *Install it on your phone* b
    dialog where you can **Copy to clipboard** or **Download .txt**.
 
 Followed fighters and recent tournaments are remembered in your browser
-(`localStorage`), so they're still there next time you open the app.
+(`localStorage`), so they're still there next time you open the app. The **open
+tournament is also kept for 24h** — refreshing or reopening the app drops you straight
+back into it (until you pick a different one via *Change tournament*).
 
 You can also deep-link straight to a tournament:
 `index.html#tournoi_ecoliers_sierre_2026`.

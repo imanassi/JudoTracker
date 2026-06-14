@@ -1085,8 +1085,26 @@ function initAddPanel() {
   applyAddOpen();
 }
 
+/* Remember the open tournament so a page refresh stays in it (for 24h). */
+const LS_ACTIVE = "jm_active";
+const ACTIVE_TTL = 24 * 3600 * 1000;
+function saveActive() {
+  try { localStorage.setItem(LS_ACTIVE, JSON.stringify({ comp, ts: Date.now() })); } catch (e) {}
+}
+function clearActive() {
+  try { localStorage.removeItem(LS_ACTIVE); } catch (e) {}
+}
+function loadActive() {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_ACTIVE));
+    if (o && o.comp && o.comp.id && o.ts && Date.now() - o.ts < ACTIVE_TTL) return o.comp;
+  } catch (e) {}
+  return null;
+}
+
 /* ----------------------------- screens ---------------------------- */
 function showMain() {
+  saveActive();
   $("#screenComp").classList.add("hidden");
   $("#screenMain").classList.remove("hidden");
   // Keep the header compact: the tournament name lives in the menu, not the subtitle.
@@ -1134,6 +1152,7 @@ function configureProxy() {
 }
 function showComp() {
   stopAuto();
+  clearActive();
   comp = null; entries = []; contests = []; personIndex = [];
   $("#screenMain").classList.add("hidden");
   $("#screenComp").classList.remove("hidden");
@@ -1351,7 +1370,10 @@ setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
   loadFeatured();
   // deep-link support: index.html#tournoi_ecoliers_sierre_2026
   const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
-  if (hash) { $("#compInput").value = hash; doLoad(hash); }
+  if (hash) { $("#compInput").value = hash; doLoad(hash); return; }
+  // otherwise, reopen the tournament from the last 24h so a refresh stays in it
+  const active = loadActive();
+  if (active) { comp = active; loadFollow(); showMain(); }
 })();
 </script>
 </body>
