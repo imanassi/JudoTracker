@@ -73,8 +73,7 @@ work from `file://` or plain-http LAN addresses). The easiest free option is
 the resulting `https://…` link on your phone.
 
 Then:
-- **Android (Chrome):** tap **⤓ Install app** in the header (or browser menu →
-  *Install app* / *Add to Home screen*).
+- **Android (Chrome):** browser menu (⋮) → *Install app* / *Add to Home screen*.
 - **iPhone/iPad (Safari):** tap **Share** → **Add to Home Screen**.
 
 After that it has its own home-screen icon (the 柔 logo) and opens full-screen. The app

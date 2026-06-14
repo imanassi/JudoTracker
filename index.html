@@ -172,6 +172,24 @@
   #exportText { width: 100%; height: 240px; background: #0c1119; color: var(--text); border: 1px solid var(--border); border-radius: 9px; padding: 11px 13px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.5; resize: vertical; outline: none; }
   #exportText:focus { border-color: var(--accent); }
 
+  .brand-text { min-width: 0; }
+  .brand-text h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-wrap { position: relative; flex: 0 0 auto; }
+  .iconbtn {
+    display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto;
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .iconbtn:hover { background: #283449; border-color: #3a4d6e; }
+  .menu {
+    position: absolute; right: 0; top: calc(100% + 8px); z-index: 50;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; min-width: 220px; max-width: 78vw;
+    box-shadow: 0 14px 36px rgba(0,0,0,.5);
+  }
+  .menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
+  .menu-name { font-weight: 700; font-size: 15px; margin: 3px 0 10px; word-break: break-word; }
+  .menu .btn { width: 100%; }
   .empty { text-align: center; color: var(--muted); padding: 28px 12px; }
   .status { font-size: 12.5px; color: var(--muted); }
   .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -206,13 +224,21 @@
   <div class="wrap">
     <div class="brand">
       <div class="logo">柔</div>
-      <div>
+      <div class="brand-text">
         <h1>Judo Fighter Tracker</h1>
         <p class="sub" id="subtitle">Follow your fighters — see when &amp; where they fight</p>
       </div>
       <div class="spacer"></div>
-      <button class="btn small primary hidden" id="btnInstall">⤓ Install app</button>
-      <button class="btn small ghost hidden" id="btnChange">Change tournament</button>
+      <div class="menu-wrap hidden" id="menuWrap">
+        <button class="iconbtn" id="btnMenu" aria-label="Tournament menu" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="menu hidden" id="headerMenu">
+          <div class="menu-label">Tournament</div>
+          <div class="menu-name" id="menuCompName"></div>
+          <button class="btn small" id="btnChange">Change tournament</button>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -948,21 +974,26 @@ function stopAuto() { if (refreshTimer) { clearInterval(refreshTimer); refreshTi
 function showMain() {
   $("#screenComp").classList.add("hidden");
   $("#screenMain").classList.remove("hidden");
-  $("#btnChange").classList.remove("hidden");
-  $("#subtitle").textContent = comp.title;
+  // Keep the header compact: the tournament name lives in the menu, not the subtitle.
+  $("#menuWrap").classList.remove("hidden");
+  $("#menuCompName").textContent = [comp.title, comp.place].filter(Boolean).join(" · ");
   renderHero();
   renderChips();
   renderResults();
   refresh(true);
   startAuto();
 }
+function closeHeaderMenu() {
+  $("#headerMenu").classList.add("hidden");
+  $("#btnMenu").setAttribute("aria-expanded", "false");
+}
 function showComp() {
   stopAuto();
   comp = null; entries = []; contests = []; personIndex = [];
   $("#screenMain").classList.add("hidden");
   $("#screenComp").classList.remove("hidden");
-  $("#btnChange").classList.add("hidden");
-  $("#subtitle").textContent = "Follow your fighters — see when & where they fight";
+  $("#menuWrap").classList.add("hidden");
+  closeHeaderMenu();
   $("#compStatus").classList.add("hidden");
   $("#compErr").classList.add("hidden");
   loadFeatured();
@@ -1125,7 +1156,16 @@ $("#compSelect").onchange = e => {
   else if (v.startsWith("slug:")) { entry.classList.add("hidden"); doLoad(v.slice(5)); }
   else { entry.classList.add("hidden"); }
 };
-$("#btnChange").onclick = showComp;
+$("#btnChange").onclick = () => { closeHeaderMenu(); showComp(); };
+$("#btnMenu").onclick = (e) => {
+  e.stopPropagation();
+  const menu = $("#headerMenu");
+  const open = menu.classList.toggle("hidden");
+  $("#btnMenu").setAttribute("aria-expanded", String(!open));
+};
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#menuWrap")) closeHeaderMenu();
+});
 $("#clubSelect").onchange = renderClubMembers;
 $("#btnRefresh").onclick = () => refresh(true);
 $("#autoRefresh").onchange = startAuto;
@@ -1150,37 +1190,12 @@ setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
 
 /* --------------------- installable app (PWA) ---------------------- */
 (function pwa() {
-  // register the service worker (enables offline launch + install)
+  // Register the service worker (enables offline launch + install). The app stays
+  // installable via the browser's own menu / Share → Add to Home Screen; there is
+  // no in-app install button, to keep the header compact on small phones.
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
   }
-  const btn = $("#btnInstall");
-  const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-  let deferred = null;
-
-  // Android / desktop Chrome: capture the prompt and show our own button.
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    deferred = e;
-    if (!standalone) btn.classList.remove("hidden");
-  });
-  btn.onclick = async () => {
-    if (deferred) {
-      deferred.prompt();
-      await deferred.userChoice;
-      deferred = null;
-      btn.classList.add("hidden");
-    } else {
-      // iOS Safari has no install API — guide the user instead.
-      alert("To install: tap the Share button, then “Add to Home Screen”.");
-    }
-  };
-  window.addEventListener("appinstalled", () => btn.classList.add("hidden"));
-
-  // iOS: no beforeinstallprompt, so offer the button with manual instructions
-  // (only when running in a normal browser tab, not already installed).
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  if (isIOS && !standalone) btn.classList.remove("hidden");
 })();
 
 /* ----------------------------- startup ---------------------------- */
