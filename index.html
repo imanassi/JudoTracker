@@ -410,6 +410,11 @@ async function jmFetch(url, opts) {
   opts = opts || {};
   const isPost = opts.method && opts.method.toUpperCase() !== "GET";
 
+  // Cache-bust GET requests. The public proxies (and CDNs in front of them) cache
+  // responses, so without this every refresh returns the same stale copy and live
+  // progress never updates. The API ignores the extra param.
+  if (!isPost) url += (url.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
+
   // Candidate URLs: a direct call (works only on a trusted origin) plus every
   // eligible proxy.
   const candidates = [url];
