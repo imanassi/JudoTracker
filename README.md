@@ -14,6 +14,7 @@ icons) just make it **installable on a phone** (see *Install it on your phone* b
 1. Open the app (see *Running it* below).
 2. **Choose a tournament** without needing a link:
    - **Today’s tournaments** loads events scheduled for today from JudoManager’s calendar.
+     Swiss tournaments appear first, with alphabetical ordering within each group.
      Select an event to follow its live results. This is a date-based listing, not a
      guarantee that a bout is currently running.
    - **Find a tournament by name** searches across years as you type (at least two

@@ -511,6 +511,10 @@ function normalizeTournament(e) {
   };
 }
 
+function isSwissTournament(tournament) {
+  return ["CH", "CHE", "SUI"].includes(String(tournament.country).trim().toUpperCase());
+}
+
 function localDateKey(date = new Date()) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
@@ -547,7 +551,7 @@ async function discoverTournaments(query = "") {
     discoveryItems = [...new Map(rows.map(normalizeTournament).filter(c => c.id).map(c => [c.id, c])).values()];
     discoveryItems.sort((a, b) => query
       ? String(b.dateFrom || "").localeCompare(String(a.dateFrom || "")) || a.title.localeCompare(b.title)
-      : a.title.localeCompare(b.title));
+      : Number(isSwissTournament(b)) - Number(isSwissTournament(a)) || a.title.localeCompare(b.title));
     status.textContent = discoveryItems.length
       ? (query ? `${discoveryItems.length} tournaments found. Select one below.${rows.length >= 50 ? " Refine your name search for more specific results." : ""}` : "Events scheduled for today — select one to follow live results.")
       : (query ? "No tournaments found. Try a shorter name or use a URL/code below." : "No tournaments listed for today. Search by name or choose a recent event below.");
