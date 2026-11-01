@@ -106,6 +106,9 @@ itself works offline; the live results still need an internet connection to refr
   behind), so the app leads with the **mat queue position** ("~N fights ahead on this
   mat"), computed from the not-yet-finished bouts on that mat, and shows the scheduled
   time only as secondary context.
+  Bouts marked **Awaiting…** still count in that queue, even when one or both
+  competitors are unknown; byes and completed bouts do not. A followed fighter's
+  assigned bout is shown even while their opponent is still being determined.
 
 ### The CORS proxy caveat
 
@@ -123,6 +126,9 @@ To reduce blank screens, the app also **caches the last loaded schedule** (per
 tournament) — so the "next match" still shows after a reload / app relaunch, and when a
 refresh fails, instead of going blank. The status line then reads
 *"showing last schedule — couldn't refresh"*.
+The schedule and its cache are replaced only after every fragment loads successfully,
+so a partial outage cannot silently remove bouts. Responses from a previous tournament
+or an older overlapping refresh are discarded.
 
 Still, **the public-proxy path depends on a third party being up**, and on a busy
 event day they can be unreliable from some networks. **For a rock-solid connection on
@@ -140,3 +146,10 @@ Once set, the app uses your worker first (it handles POST and the large schedule
 the public proxies become irrelevant.
 
 The file's header has step-by-step deploy instructions.
+
+## Regression tests
+
+Run `node --test tests/tracker.test.cjs` (Node.js 18 or newer; no dependencies).
+The tests cover refresh races, incomplete schedules, response-body timeouts,
+deep-link switching, and awaiting bouts. The queue fixture is a minimal Uster
+contest-order snapshot with competitor identities replaced by dummy IDs.

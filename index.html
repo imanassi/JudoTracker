@@ -379,6 +379,7 @@ let contests = [];          // raw contests array (the schedule; empty until dra
 let personIndex = [];       // [{id, name, family, given, club, country, cats:Set}]
 let follow = [];            // [{id, name, club}]
 let refreshTimer = null;
+let refreshVersion = 0;    // only the newest refresh may commit its results
 let acActive = -1;
 let acItems = [];
 let featured = [];          // featured competitions from the API
@@ -402,7 +403,12 @@ function slugFromInput(v) {
 async function fetchWithTimeout(url, opts) {
   const ac = new AbortController();
   const id = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
-  try { return await fetch(url, Object.assign({ signal: ac.signal }, opts)); }
+  try {
+    const response = await fetch(url, Object.assign({}, opts, { signal: ac.signal }));
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    // Keep the deadline active until the body has finished downloading, too.
+    return JSON.parse(await response.text());
+  }
   finally { clearTimeout(id); }
 }
 async function jmFetch(url, opts) {
@@ -425,13 +431,7 @@ async function jmFetch(url, opts) {
   // Race them all in parallel — first one to return valid JSON wins. This is far more
   // reliable than trying them one-by-one: which proxy works varies by device and
   // network, and a slow or dead one no longer blocks the ones that do work.
-  const attempts = candidates.map(c =>
-    fetchWithTimeout(c, opts).then(async r => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const txt = await r.text();
-      return JSON.parse(txt); // throws if the proxy returned an error/HTML page
-    })
-  );
+  const attempts = candidates.map(c => fetchWithTimeout(c, opts));
   try {
     return await Promise.any(attempts);
   } catch (e) {
@@ -520,47 +520,47 @@ function enterFeatured(id) {
 /* ----------------------------- data ------------------------------- */
 // The registered competitors. This is the roster used for search / club browsing
 // and works even before the draw is published (when there are no contests yet).
-async function loadRoster() {
-  try {
-    const data = await jmFetch(`${API}/Competition/GetCompetitors`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idCompetition: comp.id, language: "en" }),
-    });
-    entries = Array.isArray(data) ? data : [];
-  } catch (e) {
-    entries = [];
-  }
+async function loadRoster(competitionId) {
+  const data = await jmFetch(`${API}/Competition/GetCompetitors`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idCompetition: competitionId, language: "en" }),
+  });
+  if (!Array.isArray(data)) throw new Error("Invalid roster response");
+  return data;
 }
 
 // The schedule. The draw is organised into "fragments" (time blocks); for many
 // tournaments the plain Contest/Find returns nothing and the contests only come back
 // when queried per fragment (and those payloads are smaller, so they proxy reliably).
-async function loadContests() {
-  const find = frag => `${API}/Contest/Find?IdCompetition=${comp.id}` +
+async function loadContests(competitionId) {
+  const find = frag => `${API}/Contest/Find?IdCompetition=${competitionId}` +
     (frag != null ? `&IdFragment=${frag}` : "") + `&Language=en`;
 
-  let fragments = [];
-  try {
-    const f = await jmFetch(`${API}/Competition/GetCompCompetitionsFragments?IdCompetition=${comp.id}`);
-    fragments = Array.isArray(f) ? f : [];
-  } catch (e) { /* couldn't list fragments — fall back to the plain query below */ }
+  const fragments = await jmFetch(`${API}/Competition/GetCompCompetitionsFragments?IdCompetition=${competitionId}`);
+  if (!Array.isArray(fragments)) throw new Error("Invalid schedule fragments");
+  const readContests = data => {
+    if (!data || !Array.isArray(data.contests)) throw new Error("Invalid schedule response");
+    return data.contests;
+  };
 
   if (fragments.length) {
-    const settled = await Promise.allSettled(fragments.map(fr => jmFetch(find(fr.idFragment))));
-    const ok = settled.filter(s => s.status === "fulfilled");
-    if (!ok.length) throw new Error("schedule unreachable"); // every fragment failed
+    // Publish a schedule only when every fragment succeeds. Otherwise retain the
+    // last complete schedule, including its cache, and report a failed refresh.
+    const results = await Promise.all(fragments.map(async fr => {
+      if (fr.idFragment == null) throw new Error("Invalid schedule fragment");
+      return readContests(await jmFetch(find(fr.idFragment)));
+    }));
     const map = new Map();
-    for (const s of ok) for (const c of (s.value && s.value.contests) || []) {
+    for (const result of results) for (const c of result) {
       if (c && c.idContest != null) map.set(c.idContest, c);
     }
-    if (map.size) { contests = [...map.values()]; saveScheduleCache(); return; }
+    if (map.size) return [...map.values()];
     // fragments exist but hold no contests yet → fall through to the plain query
   }
 
   const data = await jmFetch(find(null));
-  contests = (data && data.contests) ? data.contests : [];
-  saveScheduleCache();
+  return readContests(data);
 }
 
 /* Persist a slimmed copy of the schedule so the "next match" still shows after a
@@ -579,7 +579,6 @@ function slimScore(s) {
   return { ippon: s.ippon, wazaari: s.wazaari, yuko: s.yuko, penalty: s.penalty, result: s.result };
 }
 function saveScheduleCache() {
-  if (!contests.length) return;
   try {
     const slim = contests.map(c => ({
       idContest: c.idContest, isFinished: c.isFinished, idWinner: c.idWinner, bye: c.bye,
@@ -664,7 +663,7 @@ function sideOf(c, pid) {
 }
 function opponentOf(c, side) {
   const o = side === "white" ? c.personBlue : c.personWhite;
-  if (!o) return { name: "Bye", club: "" };
+  if (!o) return { name: c.bye ? "Bye" : "Awaiting opponent", club: "" };
   return {
     name: ((o.givenName || "") + " " + (o.familyName || "")).trim() || "—",
     club: (o.club && (o.club.name || o.club.nameOfficial)) || "",
@@ -718,7 +717,7 @@ function fightsAhead(c) {
     if (o === c) continue;
     if (o.mat !== c.mat) continue;
     if (o.isFinished) continue;
-    if (!o.personWhite || !o.personBlue) continue; // skip byes/placeholders
+    if (o.bye) continue; // awaiting competitors still occupy a real queue slot
     const ot = plannedDate(o);
     if (myT && ot) { if (ot < myT) n++; }
     else if (o.fightNo < c.fightNo) n++;
@@ -731,7 +730,7 @@ function fightsAhead(c) {
 //  - upcoming but no mat yet: ordered after all queued bouts, by planned time
 //  - no upcoming bout (finished / not drawn): last
 function nextBoutKey(pid) {
-  const up = fightsFor(pid).filter(c => !c.isFinished && c.personWhite && c.personBlue);
+  const up = fightsFor(pid).filter(c => !c.isFinished && !c.bye);
   const next = up[0];
   if (!next) return Number.POSITIVE_INFINITY;
   const ahead = fightsAhead(next);
@@ -845,7 +844,7 @@ function fighterCard(f) {
   card.appendChild(head);
 
   const fl = fightsFor(f.id);
-  const upcoming = fl.filter(c => !c.isFinished && c.personWhite && c.personBlue);
+  const upcoming = fl.filter(c => !c.isFinished && !c.bye);
   const next = upcoming[0];
 
   if (next) {
@@ -1030,15 +1029,27 @@ function renderClubMembers() {
 
 /* ----------------------------- refresh ---------------------------- */
 async function refresh(showSpinner) {
+  if (!comp) return;
+  const currentComp = comp;
+  const version = ++refreshVersion;
   const status = $("#statusLine");
   $("#btnRefresh").classList.add("loading");
   if (showSpinner) status.textContent = "Updating…";
   // Roster rarely changes — load it once per tournament; refresh the schedule each time.
   // The two loads are independent: the roster (search / clubs) must still work even
   // when the larger schedule payload can't be fetched, and vice-versa.
-  if (!entries.length) await loadRoster();
-  let schedErr = false;
-  try { await loadContests(); } catch (e) { schedErr = true; }
+  const [roster, schedule] = await Promise.allSettled([
+    entries.length ? Promise.resolve(entries) : loadRoster(currentComp.id),
+    loadContests(currentComp.id),
+  ]);
+  // A tournament change or a newer refresh makes this response obsolete.
+  if (comp !== currentComp || version !== refreshVersion) return;
+  if (roster.status === "fulfilled") entries = roster.value;
+  const schedErr = schedule.status === "rejected";
+  if (!schedErr) {
+    contests = schedule.value;
+    saveScheduleCache();
+  }
 
   buildPersonIndex();
   renderChips();
@@ -1103,6 +1114,9 @@ function loadActive() {
 
 /* ----------------------------- screens ---------------------------- */
 function showMain() {
+  // Keep an existing deep link aligned with the selected tournament. Normal
+  // launches still use the saved active tournament and its 24-hour expiry.
+  if (location.hash) history.replaceState(null, "", location.pathname + location.search + "#" + encodeURIComponent(comp.slug));
   saveActive();
   $("#screenComp").classList.add("hidden");
   $("#screenMain").classList.remove("hidden");
@@ -1152,6 +1166,7 @@ function configureProxy() {
 function showComp() {
   stopAuto();
   clearActive();
+  history.replaceState(null, "", location.pathname + location.search);
   comp = null; entries = []; contests = []; personIndex = [];
   $("#screenMain").classList.add("hidden");
   $("#screenComp").classList.remove("hidden");
@@ -1230,6 +1245,7 @@ function renderCompPicker() {
 }
 
 async function doLoad(rawInput) {
+  if ($("#btnLoadComp").disabled) return;
   const slug = slugFromInput(rawInput);
   const errEl = $("#compErr");
   const statusEl = $("#compStatus");
