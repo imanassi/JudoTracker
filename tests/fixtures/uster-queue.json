@@ -1,0 +1,243 @@
+{
+  "source": "https://portal.judomanager.com/competition/schulerturnier_uster_2026/contest_order",
+  "captured": "2026-11-01",
+  "note": "Minimal queue snapshot; competitor identities replaced with dummy IDs. Portal position 14 includes five awaiting bouts.",
+  "targetId": 2534908,
+  "expectedAhead": 13,
+  "contests": [
+    {
+      "idContest": 2534577,
+      "isFinished": false,
+      "bye": true,
+      "mat": 1,
+      "fightNo": 26,
+      "zacetekPlaniran": "2026-10-31T20:34:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534580,
+      "isFinished": false,
+      "bye": true,
+      "mat": 1,
+      "fightNo": 29,
+      "zacetekPlaniran": "2026-10-31T20:43:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534582,
+      "isFinished": false,
+      "bye": true,
+      "mat": 1,
+      "fightNo": 31,
+      "zacetekPlaniran": "2026-10-31T20:49:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534600,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 49,
+      "zacetekPlaniran": "2026-10-31T21:43:01Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534601,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 50,
+      "zacetekPlaniran": "2026-10-31T21:46:01Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534602,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 51,
+      "zacetekPlaniran": "2026-10-31T21:49:01Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534603,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 52,
+      "zacetekPlaniran": "2026-10-31T21:52:01Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534604,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 53,
+      "zacetekPlaniran": "2026-10-31T21:55:01Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534605,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 54,
+      "zacetekPlaniran": "2026-10-31T21:58:01Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534606,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 55,
+      "zacetekPlaniran": "2026-10-31T22:01:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534607,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 56,
+      "zacetekPlaniran": "2026-10-31T22:04:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534608,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 57,
+      "zacetekPlaniran": "2026-10-31T22:10:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534609,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 58,
+      "zacetekPlaniran": "2026-10-31T22:13:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534610,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 59,
+      "zacetekPlaniran": "2026-10-31T22:16:01Z",
+      "personWhite": null,
+      "personBlue": null
+    },
+    {
+      "idContest": 2534843,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 1,
+      "zacetekPlaniran": "2026-10-31T22:19:02Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534907,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 1,
+      "zacetekPlaniran": "2026-10-31T22:25:02Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534908,
+      "isFinished": false,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 3,
+      "zacetekPlaniran": "2026-10-31T22:28:02Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2533334,
+      "isFinished": true,
+      "bye": false,
+      "mat": 1,
+      "fightNo": 1,
+      "zacetekPlaniran": "2026-10-31T17:04:00Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    },
+    {
+      "idContest": 2534821,
+      "isFinished": false,
+      "bye": false,
+      "mat": 2,
+      "fightNo": 2,
+      "zacetekPlaniran": "2026-11-01T11:13:02Z",
+      "personWhite": {
+        "idPerson": 1
+      },
+      "personBlue": {
+        "idPerson": 2
+      }
+    }
+  ]
+}
