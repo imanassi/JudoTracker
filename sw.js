@@ -2,7 +2,7 @@
    Caches the app shell so the installed app launches instantly and works offline.
    Live tournament data (datav2.judomanager.com via the CORS proxies) is never
    cached — those cross-origin requests are left to go straight to the network. */
-const CACHE = "judo-tracker-v1";
+const CACHE = "judo-tracker-v2";
 const SHELL = [
   "./",
   "./index.html",

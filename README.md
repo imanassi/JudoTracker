@@ -76,7 +76,11 @@ work from `file://` or plain-http LAN addresses). The easiest free option is
 the resulting `https://…` link on your phone.
 
 Then:
-- **Android (Chrome):** browser menu (⋮) → *Install app* / *Add to Home screen*.
+- **Android (Chrome):** tap **Install** in the app header, then confirm the browser’s
+  installation prompt. This adds the Judo Tracker icon to your home screen/app drawer.
+  If Chrome has not made the prompt available, the button shows instructions to use
+  the browser menu (⋮) → *Install app* / *Add to Home screen*.
+  The Install button is hidden when running the installed app.
 - **iPhone/iPad (Safari):** tap **Share** → **Add to Home Screen**.
 
 After that it has its own home-screen icon (the 柔 logo) and opens full-screen. The app
@@ -154,7 +158,7 @@ The file's header has step-by-step deploy instructions.
 
 ## Regression tests
 
-Run `node --test tests/tracker.test.cjs` (Node.js 18 or newer; no dependencies).
-The tests cover refresh races, incomplete schedules, response-body timeouts,
+Run `node --test tests/*.test.cjs` (Node.js 18 or newer; no dependencies).
+The tests cover installation prompts and fallback instructions, refresh races, incomplete schedules, response-body timeouts,
 deep-link switching, and awaiting bouts. The queue fixture is a minimal Uster
 contest-order snapshot with competitor identities replaced by dummy IDs.

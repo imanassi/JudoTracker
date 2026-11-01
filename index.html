@@ -234,6 +234,7 @@
         <h1>Judo Fighter Tracker</h1>
       </div>
       <div class="spacer"></div>
+      <button class="btn small hidden" id="btnInstall" aria-controls="installHelp" aria-expanded="false">Install</button>
       <div class="menu-wrap hidden" id="menuWrap">
         <button class="iconbtn" id="btnMenu" aria-label="Tournament menu" aria-haspopup="true" aria-expanded="false">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -252,6 +253,12 @@
 </header>
 
 <main class="wrap">
+
+  <aside id="installHelp" class="card hidden" aria-label="Install Judo Tracker">
+    <strong>Add Judo Tracker to your home screen</strong>
+    <p id="installMessage" role="status"></p>
+    <button class="btn small ghost" id="installClose">Close</button>
+  </aside>
 
   <!-- STEP 1: choose tournament -->
   <section id="screenComp">
@@ -1464,9 +1471,57 @@ setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
 
 /* --------------------- installable app (PWA) ---------------------- */
 (function pwa() {
-  // Register the service worker (enables offline launch + install). The app stays
-  // installable via the browser's own menu / Share → Add to Home Screen; there is
-  // no in-app install button, to keep the header compact on small phones.
+  const button = $("#btnInstall");
+  const help = $("#installHelp");
+  const displayMode = window.matchMedia("(display-mode: standalone)");
+  let installPrompt = null;
+  let installed = false;
+  const closeHelp = () => {
+    help.classList.add("hidden");
+    button.setAttribute("aria-expanded", "false");
+  };
+  const updateButton = () => {
+    const standalone = installed || displayMode.matches || navigator.standalone === true;
+    button.classList.toggle("hidden", standalone);
+    if (standalone) closeHelp();
+  };
+  const showHelp = () => {
+    $("#installMessage").textContent = !window.isSecureContext
+      ? "Open this app using its HTTPS link to install it on your phone."
+      : "On Android, open this page in Chrome, then tap the browser menu (⋮) → Install app or Add to Home screen. If you already installed it, look for Judo Tracker on your home screen or in your app drawer. On iPhone or iPad, use Safari → Share → Add to Home Screen.";
+    help.classList.remove("hidden");
+    button.setAttribute("aria-expanded", "true");
+  };
+  $("#installClose").onclick = () => { closeHelp(); button.focus(); };
+  button.onclick = async () => {
+    if (!installPrompt) { showHelp(); return; }
+    const prompt = installPrompt;
+    installPrompt = null; // Each browser event can only be prompted once.
+    button.disabled = true;
+    closeHelp();
+    try {
+      await prompt.prompt();
+      const choice = await prompt.userChoice;
+      if (choice.outcome === "accepted") installed = true;
+    } catch {
+      showHelp();
+    } finally {
+      button.disabled = false;
+      updateButton();
+    }
+  };
+  window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+    installPrompt = event;
+    updateButton();
+  });
+  window.addEventListener("appinstalled", () => {
+    installed = true;
+    installPrompt = null;
+    updateButton();
+  });
+  displayMode.addEventListener("change", updateButton);
+  updateButton();
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
   }
