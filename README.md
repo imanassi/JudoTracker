@@ -12,24 +12,25 @@ icons) just make it **installable on a phone** (see *Install it on your phone* b
 ## How to use
 
 1. Open the app (see *Running it* below).
-2. **Choose a tournament** from the dropdown. It lists:
-   - **Featured tournaments** — the events JudoManager is currently featuring
-     (fetched live from `Competition/GetFeatured`).
-   - **Recently used** — every tournament you've loaded before (remembered in your browser).
-   - **➕ Enter a new tournament by URL / code** — for anything not in the lists above:
-     paste the portal URL (e.g.
-     `https://portal.judomanager.com/competition/tournoi_ecoliers_sierre_2026`)
-     or just the code (`tournoi_ecoliers_sierre_2026`) and press **Load**.
+2. **Choose a tournament** without needing a link:
+   - **Today’s tournaments** loads events scheduled for today from JudoManager’s calendar.
+     Select an event to follow its live results. This is a date-based listing, not a
+     guarantee that a bout is currently running.
+   - **Find a tournament by name** searches across years as you type (at least two
+     characters). Results show the date, year and location; select one to open it.
+   - **Recent & featured tournaments** keeps previously loaded and featured events handy.
+   - **Enter a new tournament by URL / code** remains available as a fallback.
+   Use **Refresh list** to retry or reload the current search.
 
-   (The featured list is curated by JudoManager and won't contain every event — use the
-   URL/code option for a specific local tournament that isn't featured.)
 3. **Add fighters**, two ways:
    - **By name:** start typing a name (or club) and pick from the list of real entrants.
    - **By club:** choose a club from the *Browse a club* dropdown to see everyone
      entered from that club, then **Add** them individually or **Add all** at once.
    Add as many as you like; each one can be removed again from its **Added ✓** button,
    the *Following* chips, or its card.
-4. Each fighter gets a card with their **next bout** (mat + queue position + the
+4. Fighters appear alphabetically by displayed name (first name, then surname),
+   including cards, following chips, name suggestions, club lists and exports.
+   Each fighter gets a card with their **next bout** (mat + queue position + the
    **belt colour they must wear** — White or Red) and a list of **all their bouts**
    (wins/losses with scores, the belt for each, and what's still to come).
 
@@ -83,6 +84,10 @@ itself works offline; the live results still need an internet connection to refr
 
 ## How it works
 
+- Loads today’s tournaments from `GET /api/Calendar?Type=Competitions` with
+  today’s local date for `DateFrom` and `DateTo`, following all result pages.
+- Searches names via `GET /api/Search/GlobalSearch?Query=…&Language=en&Limit=50`,
+  using only competition results. Requests are debounced and stale responses ignored.
 - Populates the *Featured tournaments* dropdown from
   `GET https://datav2.judomanager.com/api/Competition/GetFeatured?Language=en`
   (selecting one uses its `idCompetition`/`idExternal` directly — no extra lookup).

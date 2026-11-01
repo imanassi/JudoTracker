@@ -78,7 +78,7 @@ test('only the latest overlapping refresh can commit within one tournament', asy
 test('leaving the tournament discards pending responses', async () => {
   const app = setup();
   deferredResponses(app);
-  app.run(`comp={id:1}; entries=[{}]; let request=refresh(true); loadFeatured=()=>{}; showComp(); pending[0].resolve([]);`);
+  app.run(`comp={id:1}; entries=[{}]; let request=refresh(true); loadFeatured=()=>{}; discoverTournaments=()=>{}; showComp(); pending[0].resolve([]);`);
   await tick();
   app.run('pending[1].resolve({contests:[{idContest:1}]})');
   await app.run('request');
@@ -148,7 +148,7 @@ test('a completed JSON response clears its timeout', async () => {
 test('switching from a deep link preserves the selected tournament on reload', () => {
   const app = setup();
   app.location.hash = '#tournament-a';
-  app.run(`loadFeatured=()=>{}; refresh=()=>{}; comp={id:1,slug:'tournament-a'};
+  app.run(`loadFeatured=()=>{}; discoverTournaments=()=>{}; refresh=()=>{}; comp={id:1,slug:'tournament-a'};
     showComp(); comp={id:2,slug:'tournament-b'}; showMain();`);
   assert.equal(app.location.hash, '');
   app.run(`comp=null; let loadedSlug=null; doLoad=slug=>{loadedSlug=slug};`);
@@ -182,4 +182,54 @@ test('a fighter awaiting an opponent still has an upcoming bout', () => {
   const card = app.run(`fighterCard({id:7,name:'Test'})`);
   assert.match(card.children[1].innerHTML, /Awaiting opponent/);
   assert.doesNotMatch(card.children[1].innerHTML, /competition finished|Bye/);
+});
+
+test('today discovery loads every calendar page and excludes non-competition events', async () => {
+  const app = setup();
+  app.run(`let calls=[]; jmFetch=async url=>{
+    calls.push(url);
+    return url.includes('Page=1&')
+      ? {list:[{type:'Event',idEntity:99},{type:'Competition',idEntity:2,name:'Zulu',competitionOnlyDetails:{externalId:'zulu'}}],hasMore:true}
+      : {list:[{type:'Competition',idEntity:1,name:'Alpha',competitionOnlyDetails:{externalId:'alpha'}}],hasMore:false};
+  };`);
+  await app.run('discoverTournaments()');
+  assert.equal(app.run('calls.length'), 2);
+  assert.match(app.run('calls[0]'), /Type=Competitions/);
+  assert.equal(app.run('discoveryItems.map(c=>c.slug).join(",")'), 'alpha,zulu');
+  app.run('refresh=()=>{}; enterTournament(discoveryItems[0])');
+  assert.equal(app.run('comp.id'), 1);
+  assert.equal(app.run('comp.slug'), 'alpha');
+});
+
+test('name search ignores stale responses and preserves the selected result external ID', async () => {
+  const app = setup();
+  deferredResponses(app);
+  app.run(`let oldSearch=discoverTournaments('old'); let newSearch=discoverTournaments('Uster & friends');`);
+  assert.match(app.run('pending[1].url'), /Query=Uster%20%26%20friends/);
+  app.run(`pending[1].resolve({competitions:[{idCompetition:6285,name:'Uster',externalId:'uster_2026',dateFrom:'2026-11-01'}]})`);
+  await app.run('newSearch');
+  app.run(`pending[0].resolve({competitions:[{idCompetition:1,name:'Old'}]})`);
+  await app.run('oldSearch');
+  assert.equal(app.run('discoveryItems[0].slug'), 'uster_2026');
+  await app.run('discoverTournaments("x")');
+  assert.equal(app.run('discoveryItems.length'), 0);
+  assert.match(app.nodes.get('#discoveryStatus').textContent, /at least 2/);
+});
+
+test('discovery distinguishes an empty result from a failed request and can retry', async () => {
+  const app = setup();
+  app.run('jmFetch=async()=>{throw Error("offline")}');
+  await app.run('discoverTournaments("Uster")');
+  assert.match(app.nodes.get('#discoveryStatus').textContent, /Couldn’t load/);
+  app.run('jmFetch=async()=>({competitions:[]})');
+  await app.run('discoverTournaments("Uster")');
+  assert.match(app.nodes.get('#discoveryStatus').textContent, /No tournaments found/);
+});
+
+test('fighter cards sort by displayed name instead of next bout or addition order', () => {
+  const app = setup();
+  app.run(`follow=[{id:1,name:'Zoe Adams'},{id:2,name:'Émile Zed'},{id:3,name:'alice Young'}];
+    let rendered=[]; fighterCard=f=>{rendered.push(f.name);return {}}; renderResults();`);
+  assert.equal(app.run('rendered.join(",")'), 'alice Young,Émile Zed,Zoe Adams');
+  assert.equal(app.run('follow[0].id'), 1);
 });

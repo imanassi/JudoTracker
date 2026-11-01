@@ -258,6 +258,16 @@
     <div class="card">
       <div class="label">Step 1 · Choose a tournament</div>
 
+      <label for="tournamentSearch">Find a tournament by name</label>
+      <input type="search" id="tournamentSearch" autocomplete="off" placeholder="Type a tournament name, e.g. Uster" style="margin:8px 0" />
+      <div class="row" style="margin:12px 0 6px">
+        <strong id="discoveryHeading">Today’s tournaments</strong>
+        <div class="spacer"></div>
+        <button class="btn small ghost" id="retryDiscovery">Refresh list</button>
+      </div>
+      <div class="muted" id="discoveryStatus" role="status" style="font-size:13px;margin-bottom:8px"></div>
+      <div id="tournamentResults" style="max-height:360px;overflow-y:auto;margin-bottom:18px"></div>
+      <div class="label">Recent &amp; featured tournaments</div>
       <div id="compPickerWrap" class="hidden">
         <select class="jm" id="compSelect"></select>
       </div>
@@ -384,6 +394,9 @@ let acActive = -1;
 let acItems = [];
 let featured = [];          // featured competitions from the API
 let featuredState = "idle"; // idle | loading | done | error
+let discoveryVersion = 0;
+let discoveryTimer = null;
+let discoveryItems = [];
 let addOpen = true;         // whether the "add a fighter" panel is expanded
 
 /* --------------------------- utilities ---------------------------- */
@@ -481,6 +494,78 @@ async function loadCompetition(slug) {
   loadFollow();
 }
 
+function normalizeTournament(e) {
+  return {
+    id: e.idCompetition || e.idEntity,
+    slug: e.idExternal || e.externalId || e.competitionOnlyDetails?.externalId || "",
+    title: e.name || e.nameInternational || e.idExternal || "Tournament",
+    place: e.city || e.place || "", country: e.countryShort || e.country?.short || "",
+    dateFrom: e.dateFrom, dateTo: e.dateTo,
+  };
+}
+
+function localDateKey(date = new Date()) {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+async function discoverTournaments(query = "") {
+  clearTimeout(discoveryTimer);
+  const version = ++discoveryVersion;
+  query = query.trim();
+  const status = $("#discoveryStatus"), box = $("#tournamentResults");
+  $("#discoveryHeading").textContent = query ? "Search results" : "Today’s tournaments";
+  box.innerHTML = "";
+  discoveryItems = [];
+  if (query && query.length < 2) { status.textContent = "Type at least 2 characters to search."; return; }
+  status.textContent = query ? "Searching tournaments…" : "Loading today’s tournaments…";
+  try {
+    let rows = [];
+    if (query) {
+      const data = await jmFetch(`${API}/Search/GlobalSearch?Query=${encodeURIComponent(query)}&Language=en&Limit=50`);
+      if (!Array.isArray(data?.competitions)) throw new Error("Invalid search response");
+      rows = data.competitions;
+    } else {
+      const today = localDateKey();
+      let page = 1, more;
+      do {
+        const data = await jmFetch(`${API}/Calendar?Type=Competitions&DateFrom=${today}&DateTo=${today}&Language=en&OrderAscending=true&Page=${page}&PerPage=100`);
+        if (version !== discoveryVersion) return;
+        if (!Array.isArray(data?.list)) throw new Error("Invalid calendar response");
+        rows.push(...data.list.filter(e => e.type === "Competition"));
+        more = data.hasMore;
+        page++;
+      } while (more);
+    }
+    if (version !== discoveryVersion) return;
+    discoveryItems = [...new Map(rows.map(normalizeTournament).filter(c => c.id).map(c => [c.id, c])).values()];
+    discoveryItems.sort((a, b) => query
+      ? String(b.dateFrom || "").localeCompare(String(a.dateFrom || "")) || a.title.localeCompare(b.title)
+      : a.title.localeCompare(b.title));
+    status.textContent = discoveryItems.length
+      ? (query ? `${discoveryItems.length} tournaments found. Select one below.${rows.length >= 50 ? " Refine your name search for more specific results." : ""}` : "Events scheduled for today — select one to follow live results.")
+      : (query ? "No tournaments found. Try a shorter name or use a URL/code below." : "No tournaments listed for today. Search by name or choose a recent event below.");
+    for (const c of discoveryItems) {
+      const button = el("button", "btn ghost");
+      button.style.cssText = "display:block;width:100%;text-align:left;white-space:normal;margin-bottom:6px";
+      const year = c.dateFrom ? String(c.dateFrom).slice(0, 4) : "";
+      button.textContent = compOptionLabel(c) + (year ? ` · ${year}` : "");
+      button.onclick = () => enterTournament(c);
+      box.appendChild(button);
+    }
+  } catch {
+    if (version !== discoveryVersion) return;
+    status.textContent = "Couldn’t load tournaments. Try Refresh list, or use a recent event or URL/code below.";
+  }
+}
+
+function queueTournamentSearch() {
+  clearTimeout(discoveryTimer);
+  ++discoveryVersion; // invalidate an old response immediately, before the debounce
+  $("#tournamentResults").innerHTML = "";
+  $("#discoveryStatus").textContent = "Searching…";
+  discoveryTimer = setTimeout(() => discoverTournaments($("#tournamentSearch").value), 350);
+}
+
 async function loadFeatured() {
   if (featuredState === "loading" || featuredState === "done") { renderCompPicker(); return; }
   featuredState = "loading";
@@ -510,6 +595,12 @@ async function loadFeatured() {
 function enterFeatured(id) {
   const e = featured.find(x => x.id === id);
   if (!e) return;
+  enterTournament(e);
+}
+
+function enterTournament(e) {
+  ++discoveryVersion;
+  clearTimeout(discoveryTimer);
   comp = { id: e.id, slug: e.slug || ("id-" + e.id), title: e.title, place: e.place, country: e.country, dateFrom: e.dateFrom };
   entries = []; contests = []; personIndex = [];
   pushRecent(comp);
@@ -652,7 +743,7 @@ function buildPersonIndex() {
     }
   }
 
-  personIndex = [...map.values()].sort((a, b) => a.family.localeCompare(b.family));
+  personIndex = [...map.values()].sort((a, b) => compareFighters(a, b));
 }
 
 /* score / result helpers */
@@ -748,6 +839,10 @@ function renderHero() {
     `<div class="meta">${esc(sub)}</div>`;
 }
 
+function compareFighters(a, b) {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }) || a.id - b.id;
+}
+
 function renderChips() {
   const box = $("#followChips");
   box.innerHTML = "";
@@ -758,7 +853,7 @@ function renderChips() {
     box.innerHTML = `<span class="muted" style="font-size:13px">No fighters yet — open “Add a fighter” above.</span>`;
     return;
   }
-  for (const f of follow) {
+  for (const f of [...follow].sort(compareFighters)) {
     const chip = el("span", "chip");
     chip.innerHTML = `<span>${esc(f.name)}</span>`;
     const x = el("button", null, "&times;");
@@ -906,15 +1001,7 @@ function renderResults() {
     box.appendChild(el("div", "card empty", "Add one or more fighters above to start tracking them."));
     return;
   }
-  // Sort so whoever fights next is on top. The reliable signal is the mat queue
-  // position (same as each card's headline): fewest fights ahead = soonest. Fighters
-  // not yet assigned to a mat fall back to their planned time, then everyone with no
-  // upcoming bout (finished / not drawn) goes last.
-  const withNext = follow
-    .map(f => ({ f, key: nextBoutKey(f.id) }))
-    .sort((a, b) => a.key - b.key);
-
-  for (const x of withNext) box.appendChild(fighterCard(x.f));
+  for (const f of [...follow].sort(compareFighters)) box.appendChild(fighterCard(f));
 }
 
 /* ---------------------------- autocomplete ------------------------ */
@@ -995,7 +1082,7 @@ function renderClubMembers() {
   if (!club) return;
   const members = personIndex
     .filter(p => p.club === club)
-    .sort((a, b) => a.family.localeCompare(b.family) || a.given.localeCompare(b.given));
+    .sort((a, b) => compareFighters(a, b));
   const followedIds = new Set(follow.map(f => f.id));
   const notFollowed = members.filter(m => !followedIds.has(m.id));
 
@@ -1175,6 +1262,7 @@ function showComp() {
   $("#compStatus").classList.add("hidden");
   $("#compErr").classList.add("hidden");
   loadFeatured();
+  discoverTournaments($("#tournamentSearch").value);
 }
 function fmtDateRange(from, to) {
   if (!from) return "";
@@ -1280,7 +1368,7 @@ function buildExportText() {
   }
   const rows = follow
     .map(f => Object.assign({ name: f.name }, fighterRecord(f.id)))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(compareFighters);
   for (const r of rows) lines.push(`${r.name} ${r.w} win - ${r.l} lost`);
   return lines.join("\n");
 }
@@ -1320,6 +1408,11 @@ function downloadExport() {
 }
 
 /* ------------------------------ wire ------------------------------ */
+$("#tournamentSearch").addEventListener("input", queueTournamentSearch);
+$("#tournamentSearch").addEventListener("keydown", e => {
+  if (e.key === "Enter") discoverTournaments(e.target.value);
+});
+$("#retryDiscovery").onclick = () => discoverTournaments($("#tournamentSearch").value);
 $("#btnExport").onclick = openExport;
 $("#exportClose").onclick = closeExport;
 $("#exportCopy").onclick = copyExport;
@@ -1383,6 +1476,7 @@ setInterval(() => { if (comp && follow.length) renderResults(); }, 60000);
 (function init() {
   renderCompPicker();
   loadFeatured();
+  discoverTournaments($("#tournamentSearch").value);
   // deep-link support: index.html#tournoi_ecoliers_sierre_2026
   const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (hash) { $("#compInput").value = hash; doLoad(hash); return; }
